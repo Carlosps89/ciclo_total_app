@@ -399,12 +399,12 @@ function OriginDrawer({ origem, onClose, terminal, produto, praca }: { origem: s
                 ) : (
                    <>
                       {/* KPIs Grid */}
-                      <div className="grid grid-cols-2 gap-3">
-                          <KpiCard title="Última Hora" val={data?.kpis?.last_hour?.avg_cycle_h} vol={data?.kpis?.last_hour?.trips} color="blue" />
-                          <KpiCard title="Hoje (Dia)" val={data?.kpis?.today?.avg_cycle_h} vol={data?.kpis?.today?.trips} color="green" />
-                          <KpiCard title="Mês Atual" val={data?.kpis?.month?.avg_cycle_h} vol={data?.kpis?.month?.trips} color="purple" />
-                          <KpiCard title="Ano Atual" val={data?.kpis?.year?.avg_cycle_h} vol={data?.kpis?.year?.trips} color="orange" />
-                      </div>
+                       <div className="grid grid-cols-2 gap-3">
+                           <KpiCard title="Última Hora" val={data?.kpis?.last_hour?.avg_cycle_h || 0} vol={data?.kpis?.last_hour?.trips || 0} color="blue" />
+                           <KpiCard title="Hoje (Dia)" val={data?.kpis?.today?.avg_cycle_h || 0} vol={data?.kpis?.today?.trips || 0} color="green" />
+                           <KpiCard title="Mês Atual" val={data?.kpis?.month?.avg_cycle_h || 0} vol={data?.kpis?.month?.trips || 0} color="purple" />
+                           <KpiCard title="Ano Atual" val={data?.kpis?.year?.avg_cycle_h || 0} vol={data?.kpis?.year?.trips || 0} color="orange" />
+                       </div>
 
                       {/* Vehicles List */}
                       <section>
