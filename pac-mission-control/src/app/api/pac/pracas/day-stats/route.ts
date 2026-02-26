@@ -13,7 +13,7 @@ async function getSchemaMap(): Promise<Record<string, string>> {
     const cached = getCached<Record<string, string>>(cacheKey);
     if (cached) return cached;
     const result = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns = result?.ResultSetMetadata?.ColumnInfo?.map((c: ColumnInfo) => c.Name).filter((n: any): n is string => !!n) || [];
+    const columns = (result?.ResultSetMetadata?.ColumnInfo?.map((c: ColumnInfo) => c.Name) || []).filter((n: string | undefined | null): n is string => !!n);
     const map = getCleanMap(columns);
     setCached(cacheKey, map, 6 * 60 * 60 * 1000); // 6h
     return map;
