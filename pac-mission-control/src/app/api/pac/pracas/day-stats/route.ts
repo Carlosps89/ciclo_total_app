@@ -3,7 +3,7 @@ import { runQuery, ATHENA_VIEW, ATHENA_DATABASE } from '@/lib/athena';
 import { COMMON_CTES, getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { getPracaSqlMapper } from '@/lib/pracas';
-import { ResultSet } from '@aws-sdk/client-athena';
+import { ResultSet, ColumnInfo, Row } from '@aws-sdk/client-athena';
 
 const CACHE_TTL = 60 * 1000; // 1 minute
 const META_H = 46.5333; // 46h32m
@@ -13,7 +13,7 @@ async function getSchemaMap(): Promise<Record<string, string>> {
     const cached = getCached<Record<string, string>>(cacheKey);
     if (cached) return cached;
     const result = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns = result?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [];
+    const columns = result?.ResultSetMetadata?.ColumnInfo?.map((c: ColumnInfo) => c.Name).filter((n: any): n is string => !!n) || [];
     const map = getCleanMap(columns);
     setCached(cacheKey, map, 6 * 60 * 60 * 1000); // 6h
     return map;
@@ -64,7 +64,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const results: ResultSet | undefined = await runQuery(query);
         const rows = results?.Rows?.slice(1) || [];
 
-        const items = rows.map(r => {
+        const items = rows.map((r: Row) => {
             const data = r.Data || [];
             const praca = data[0]?.VarCharValue || 'OUTROS';
             const avg_h = parseFloat(data[1]?.VarCharValue || '0');
