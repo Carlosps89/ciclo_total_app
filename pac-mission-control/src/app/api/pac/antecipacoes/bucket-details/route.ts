@@ -1,0 +1,168 @@
+import { NextResponse } from 'next/server';
+import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { getCleanMap } from '@/lib/athena-sql';
+import { ResultSet } from '@aws-sdk/client-athena';
+
+// Helper to get BRT components (Same as in ciclo-total)
+function getBRTComponents(date: Date): { full: string; ymd: string; h: string; m: string; s: string; year: string; month: string; day: string } {
+  const fmt = (options: Intl.DateTimeFormatOptions): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', ...options }).format(date);
+  const ymd: string = fmt({ year: 'numeric', month: '2-digit', day: '2-digit' });
+  const h: string = fmt({ hour: '2-digit', hour12: false });
+  const m: string = fmt({ minute: '2-digit' });
+  const s: string = fmt({ second: '2-digit' });
+  return { full: `${ymd} ${h}:${m}:${s}`, ymd, h, m, s, year: ymd.substring(0, 4), month: ymd.substring(5, 7), day: ymd.substring(8, 10) };
+}
+
+export async function GET(request: Request): Promise<NextResponse> {
+  try {
+    const { searchParams }: URL = new URL(request.url);
+    const terminal: string = searchParams.get('terminal') || 'TRO';
+    const bucket: string = searchParams.get('bucket') || '';
+    const produto: string | null = searchParams.get('produto');
+    
+    // Default limit
+    const limit = 50;
+
+    if (!bucket) {
+        return NextResponse.json({ error: 'Bucket Required' }, { status: 400 });
+    }
+
+    const TARGET_VIEW: string = 'VW_Ciclo';
+
+    // Cast to any to avoid strict type checks on dynamic map properties
+    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
+      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
+      .then((cols: string[]) => getCleanMap(cols));
+      
+    const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
+
+    const now: Date = new Date();
+    const brt = getBRTComponents(now); // D0
+
+    // Time Boundaries
+    const startDay: string = `${brt.ymd} 00:00:00`;
+    const tmr: Date = new Date(now);
+    tmr.setDate(tmr.getDate() + 1);
+    const brtTmr = getBRTComponents(tmr); // D1
+    const endNextDay: string = `${brtTmr.ymd} 23:59:59`;
+
+    // Manual CTE construction
+    const raw_cols: string = `
+        ${map.id} as _col_id,
+        ${map.terminal} as _col_terminal,
+        ${map.placa} as _col_placa,
+        ${map.origem} as _col_origem,
+        ${map.dt_agendamento} as _col_agendamento,
+        ${map.dt_chegada} as _col_chegada,
+        ${map.dt_peso_saida} as _col_peso_saida,
+        ${map.dt_cheguei} as _col_cheguei,
+        ${map.janela_agendamento} as _col_janela,
+        greatest(
+            coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
+            coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
+            coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00'),
+            coalesce(try_cast(${map.dt_agendamento} as timestamp), timestamp '1900-01-01 00:00:00')
+        ) as ts_ult
+    `;
+
+    // Parsing Bucket Logic
+    let bucketFilter = '';
+    
+    if (bucket === '12h+') {
+        bucketFilter = `hours_early >= 12`;
+    } else {
+        // Expected format "0-1", "1-2"
+        const parts = bucket.split('-');
+        if (parts.length === 2) {
+            const start = parseInt(parts[0]);
+            // const end = parseInt(parts[1]); 
+            // Logic: start <= h < start + 1 (since end is just start + 1)
+             bucketFilter = `hours_early >= ${start} AND hours_early < ${start + 1}`;
+        }
+    }
+
+    if (!bucketFilter) {
+         return NextResponse.json({ error: 'Invalid Bucket Format' }, { status: 400 });
+    }
+
+    const query: string = `
+      WITH raw_data AS (
+          SELECT ${raw_cols}
+          FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}"
+          WHERE ${map.terminal} = '${terminal}'
+            ${produtoFilterRaw}
+      ),
+      dedupped AS (
+          SELECT * FROM (
+              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
+              FROM raw_data
+          ) WHERE rn = 1
+      ),
+      calc AS (
+          SELECT
+              _col_id as gmo_id,
+              _col_placa as placa_tracao,
+              _col_origem as origem,
+              _col_terminal as terminal,
+              try_cast(_col_peso_saida as timestamp) as peso_saida,
+              try_cast(_col_cheguei as timestamp) as cheguei,
+              try_cast(_col_janela as timestamp) as janela_agendamento,
+              try_cast(_col_agendamento as timestamp) as dt_agendamento
+          FROM dedupped
+      )
+      , arrivals_today AS (
+          SELECT 
+            *,
+            CASE WHEN cheguei < janela_agendamento THEN 1 END as is_early,
+            date_diff('second', cheguei, janela_agendamento) / 3600.0 as hours_early
+          FROM calc
+          WHERE cheguei >= timestamp '${startDay}' 
+            AND cheguei <= timestamp '${endNextDay}'
+            AND janela_agendamento IS NOT NULL
+      )
+      SELECT 
+        gmo_id,
+        placa_tracao,
+        origem,
+        terminal,
+        format_datetime(cheguei, 'dd/MM HH:mm') as cheguei_fmt,
+        cast(hours_early as decimal(10,1)) as antecipacao_h
+      FROM arrivals_today
+      WHERE is_early = 1 
+        AND ${bucketFilter}
+      ORDER BY hours_early DESC
+      LIMIT ${limit}
+    `;
+
+    const results: ResultSet | undefined = await runQuery(query);
+    const rows: AthenaRow[] = (results?.Rows?.slice(1) || []) as AthenaRow[];
+
+    interface AthenaRow {
+        Data?: { VarCharValue?: string }[];
+    }
+
+    const items = rows.map((r: AthenaRow) => {
+      const data: string[] = r.Data?.map((d: { VarCharValue?: string }) => d.VarCharValue || '') || [];
+      return {
+        gmo_id: data[0],
+        placa: data[1],
+        origem: data[2],
+        terminal: data[3],
+        cheguei: data[4],
+        antecipacao_h: data[5]
+      };
+    });
+
+    return NextResponse.json({
+      terminal,
+      bucket,
+      count_loaded: items.length,
+      limit,
+      items
+    });
+
+  } catch (error) {
+    console.error("Anticipation Details API Error:", error);
+    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+  }
+}

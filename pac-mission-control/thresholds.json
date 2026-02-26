@@ -1,0 +1,19 @@
+{
+    "stages": {
+        "Aguardando Agendamento": {
+            "target": 120,
+            "yellow_factor": 0.2,
+            "red_factor": 0.5
+        },
+        "Tempo de Viagem": {
+            "target": 300,
+            "yellow_factor": 0.1,
+            "red_factor": 0.3
+        },
+        "Tempo Interno": {
+            "target": 60,
+            "yellow_factor": 0.25,
+            "red_factor": 0.5
+        }
+    }
+}

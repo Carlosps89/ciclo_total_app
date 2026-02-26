@@ -1,0 +1,25 @@
+--- Verificação em: Thu Feb 26 14:27:08 -04 2026 ---
+
+Error when retrieving token from sso: Token has expired and refresh failed
+[!] Sessão expirada. Iniciando login automático...
+Attempting to open your default browser.
+If the browser does not open, open the following URL:
+
+https://oidc.sa-east-1.amazonaws.com/authorize?response_type=code&client_id=ayyH-hMStk8DyffP6amwm3NhLWVhc3QtMQ&redirect_uri=http%3A%2F%2F127.0.0.1%3A64115%2Foauth%2Fcallback&state=3bac5a85-98d6-4dec-8560-aabc155167e0&code_challenge_method=S256&scopes=sso%3Aaccount%3Aaccess&code_challenge=TmnfNvZRX7ul3BE5U0zWK3XIF9uDE5aIrJFY0BvbtsE
+Successfully logged into Start URL: https://d-94670c90c8.awsapps.com/start/#
+[✓] Login realizado com sucesso.
+--- Verificação em: Thu Feb 26 15:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 16: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 21: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Thu Feb 26 16:00:01 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 16: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 21: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Thu Feb 26 17:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 16: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 21: aws: command not found
+[X] Erro ao tentar realizar o login.

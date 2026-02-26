@@ -1,438 +1,422 @@
-import math
-import pandas as pd
-import plotly.express as px
 import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+from pathlib import Path
 
 # =========================
-# CONFIGURAÇÕES BÁSICAS
+# CONFIGURAÇÃO BÁSICA
 # =========================
 
 st.set_page_config(
     page_title="Controle de Ciclo Total",
-    layout="wide"
+    layout="wide",
 )
 
-st.title("🚛 Controle de Ciclo Total")
+DADOS_DIR = Path("dados")
 
-ARQUIVO_EXCEL = "dados/Analise_Tempo_Origem_Chegada_TRO.xlsx"
+# 🔁 Ajuste os nomes dos arquivos aqui, se estiverem diferentes na sua pasta
+ARQ_2023 = DADOS_DIR / "ciclo_2023.parquet"
+ARQ_2024 = DADOS_DIR / "ciclo_2024.parquet"
+ARQ_2025 = DADOS_DIR / "ciclo_2025.parquet"
 
 
 # =========================
-# CARREGAMENTO E TRATAMENTO
+# FUNÇÕES DE APOIO
 # =========================
 
-@st.cache_data
-def carregar_dados(caminho: str) -> pd.DataFrame:
-    df = pd.read_excel(caminho, engine="openpyxl")
+def encontrar_coluna(df: pd.DataFrame, descricao: str, cond, obrigatoria: bool = True):
+    """
+    Encontra a primeira coluna cujo nome (minúsculo/strip) satisfaça a condição cond(nome).
+    cond: função que recebe uma string (nome da coluna em lower/strip) e retorna True/False.
+    """
+    cols = []
+    for c in df.columns:
+        nome = c.lower().strip()
+        if cond(nome):
+            cols.append(c)
 
-    # Limpa nomes de colunas
-    df.columns = [c.strip() for c in df.columns]
+    if not cols:
+        if obrigatoria:
+            raise KeyError(
+                f"Não encontrei coluna para {descricao}. Colunas disponíveis: {list(df.columns)}"
+            )
+        else:
+            return None
 
-    # Converte colunas de data/hora
-    col_datas = ["Emissão Nota", "agendamento", "Chegada TRO", "Saida TRO", "Data"]
-    for col in col_datas:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+    # Se houver mais de uma, usa a primeira
+    return cols[0]
 
-    # ----- Indicadores -----
-    # 1) Tempo de Agendamento: Emissão da Nota -> Criação do Agendamento
-    if "Emissão Nota" in df.columns and "agendamento" in df.columns:
-        df["tempo_agendamento_h"] = (
-            df["agendamento"] - df["Emissão Nota"]
-        ).dt.total_seconds() / 3600
 
-    # 2) Tempo de Viagem: Criação do Agendamento -> Chegada TRO
-    if "agendamento" in df.columns and "Chegada TRO" in df.columns:
-        df["tempo_viagem_h"] = (
-            df["Chegada TRO"] - df["agendamento"]
-        ).dt.total_seconds() / 3600
+def preparar_ano(caminho: Path, ano: int) -> pd.DataFrame:
+    """Lê o Excel de um ano, encontra as colunas, calcula os indicadores e devolve um DataFrame padronizado."""
 
-    # 3) Ciclo Interno: Chegada TRO -> Saída TRO
-    if "Chegada TRO" in df.columns and "Saida TRO" in df.columns:
-        df["ciclo_interno_h"] = (
-            df["Saida TRO"] - df["Chegada TRO"]
-        ).dt.total_seconds() / 3600
+    if not caminho.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {caminho}")
 
-    # 4) Ciclo Total: Emissão da Nota -> Saída TRO
-    if "Emissão Nota" in df.columns and "Saida TRO" in df.columns:
-        df["ciclo_total_h"] = (
-            df["Saida TRO"] - df["Emissão Nota"]
-        ).dt.total_seconds() / 3600
-    elif (
-        "tempo_agendamento_h" in df.columns
-        and "tempo_viagem_h" in df.columns
-        and "ciclo_interno_h" in df.columns
-    ):
-        df["ciclo_total_h"] = (
-            df["tempo_agendamento_h"]
-            + df["tempo_viagem_h"]
-            + df["ciclo_interno_h"]
+    df = pd.read_parquet(caminho)
+    df.columns = df.columns.map(lambda x: str(x).strip())
+
+    # =========================
+    # ENCONTRAR COLUNAS-BASE
+    # =========================
+    # Emissão da Nota
+    col_emissao = encontrar_coluna(
+        df,
+        "Emissão da Nota",
+        lambda s: "emiss" in s and "nota" in s,
+    )
+
+    # Criação do Agendamento (Opção A: preferir "Data do agendamento")
+    candidatos_data_ag = [
+        c
+        for c in df.columns
+        if "data do agendamento" in c.lower().strip()
+    ]
+    if candidatos_data_ag:
+        col_agendamento = candidatos_data_ag[0]
+    else:
+        col_agendamento = encontrar_coluna(
+            df,
+            "Data do agendamento",
+            lambda s: "agend" in s,
         )
 
-    # Padroniza texto
-    for col in ["Produto", "Cliente", "Origem"]:
-        if col in df.columns:
-            df[col] = df[col].astype(str)
+    # Chegada TRO
+    col_chegada = encontrar_coluna(
+        df,
+        "Chegada TRO",
+        lambda s: "chegada" in s and "tro" in s,
+    )
 
-    # Detecta coluna de GMO
-    gmo_col = None
-    for c in df.columns:
-        if c.strip().lower() in ["gmo", "gmo_id", "id_gmo"]:
-            gmo_col = c
-            break
+    # Saída TRO
+    col_saida = encontrar_coluna(
+        df,
+        "Saída TRO",
+        lambda s: "saida" in s and "tro" in s,
+    )
 
-    # Coluna base de data
-    if "Data" in df.columns:
-        base = "Data"
-    elif "Chegada TRO" in df.columns:
-        base = "Chegada TRO"
+    # Dimensões (Cliente / Produto / Origem)
+    try:
+        col_cliente = encontrar_coluna(
+            df,
+            "Cliente",
+            lambda s: "client" in s,
+        )
+    except KeyError:
+        col_cliente = None
+
+    try:
+        col_produto = encontrar_coluna(
+            df,
+            "Produto",
+            lambda s: "produt" in s,
+        )
+    except KeyError:
+        col_produto = None
+
+    try:
+        col_origem = encontrar_coluna(
+            df,
+            "Origem",
+            lambda s: "origem" in s or "orig." in s,
+        )
+    except KeyError:
+        col_origem = None
+
+    # =========================
+    # CONVERTER PARA DATETIME
+    # =========================
+    for col in [col_emissao, col_agendamento, col_chegada, col_saida]:
+        df[col] = pd.to_datetime(df[col], errors="coerce", dayfirst=False)
+
+    # =========================
+    # CALCULAR INDICADORES (EM HORAS)
+    # =========================
+    # Ciclo Total: Saída TRO - Emissão da Nota
+    delta_total = df[col_saida] - df[col_emissao]
+    ciclo_total_h = delta_total.dt.total_seconds() / 3600
+
+    # Ciclo Interno: Saída TRO - Chegada TRO
+    delta_interno = df[col_saida] - df[col_chegada]
+    ciclo_interno_h = delta_interno.dt.total_seconds() / 3600
+
+    # Tempo de Viagem: Chegada TRO - Criação do Agendamento
+    delta_viagem = df[col_chegada] - df[col_agendamento]
+    tempo_viagem_h = delta_viagem.dt.total_seconds() / 3600
+
+    # Tempo de Agendamento: Criação do Agendamento - Emissão da Nota
+    delta_agendamento = df[col_agendamento] - df[col_emissao]
+    tempo_agendamento_h = delta_agendamento.dt.total_seconds() / 3600
+
+    # =========================
+    # DIMENSÕES
+    # =========================
+    # Base de data: usamos Saída TRO; se vazia, usa Chegada TRO
+    base_data = df[col_saida].where(df[col_saida].notna(), df[col_chegada])
+
+    out = pd.DataFrame({
+        "Ano": int(ano),
+        "Data": pd.to_datetime(base_data.dt.date),
+    })
+    out["Mes"] = out["Data"].dt.month
+    out["Dia"] = out["Data"].dt.day
+
+    if col_cliente is not None:
+        out["Cliente"] = df[col_cliente].astype(str).str.strip()
     else:
-        st.error("Nenhuma coluna de data encontrada ('Data' ou 'Chegada TRO').")
+        out["Cliente"] = "N/A"
+
+    if col_produto is not None:
+        out["Produto"] = df[col_produto].astype(str).str.strip()
+    else:
+        out["Produto"] = "N/A"
+
+    if col_origem is not None:
+        out["Origem"] = df[col_origem].astype(str).str.strip()
+    else:
+        out["Origem"] = "N/A"
+
+    # Indicadores finais
+    out["Ciclo Total (h)"] = ciclo_total_h
+    out["Ciclo Interno (h)"] = ciclo_interno_h
+    out["Tempo de Viagem (h)"] = tempo_viagem_h
+    out["Tempo de Agendamento (h)"] = tempo_agendamento_h
+
+    # Remove linhas sem data
+    out = out.dropna(subset=["Data"])
+
+    return out
+
+
+@st.cache_data(show_spinner="Carregando e padronizando dados de ciclo...")
+def carregar_ciclo() -> pd.DataFrame:
+    """Carrega 2023/2024/2025, padroniza e concatena em um único DataFrame."""
+    frames = []
+
+    if ARQ_2023.exists():
+        frames.append(preparar_ano(ARQ_2023, 2023))
+    if ARQ_2024.exists():
+        frames.append(preparar_ano(ARQ_2024, 2024))
+    if ARQ_2025.exists():
+        # Se você ainda não tiver 2025, comente esta linha
+        frames.append(preparar_ano(ARQ_2025, 2025))
+
+    if not frames:
+        st.error("Nenhum arquivo de dados encontrado na pasta 'dados'. Verifique os caminhos.")
         return pd.DataFrame()
 
-    df = df[df[base].notna()].copy()
+    df = pd.concat(frames, ignore_index=True)
 
-    df["data_base"] = df[base]
-    df["ano"] = df["data_base"].dt.year
-    df["mes"] = df["data_base"].dt.to_period("M").dt.to_timestamp()
-    df["dia"] = df["data_base"].dt.date
-    df["hora"] = df["data_base"].dt.hour
-    df["data_hora"] = df["data_base"].dt.floor("H")
+    # Garantir tipos numéricos e remover linhas ruins antes de astype(int)
+    for col in ["Ano", "Mes", "Dia"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    df.attrs["gmo_col"] = gmo_col
+    # Remove linhas onde Ano/Mes/Dia não existem
+    df = df.dropna(subset=["Ano", "Mes", "Dia"])
+
+    df["Ano"] = df["Ano"].astype(int)
+    df["Mes"] = df["Mes"].astype(int)
+    df["Dia"] = df["Dia"].astype(int)
 
     return df
 
 
-df_raw = carregar_dados(ARQUIVO_EXCEL)
+def aplicar_filtros(df: pd.DataFrame) -> pd.DataFrame:
+    """Aplica filtros de Ano, Mês, Produto, Cliente, Período (Data)."""
 
-if df_raw.empty:
-    st.stop()
+    if df.empty:
+        return df
 
-COL_DATA_BASE = "data_base"
+    with st.sidebar:
+        st.header("Filtros")
 
-
-# =========================
-# MODO DE VISUALIZAÇÃO
-# =========================
-
-view_mode = st.radio(
-    "Modo de visualização",
-    ["Desktop", "Mobile"],
-    horizontal=True
-)
-
-# =========================
-# FILTROS (SIDEBAR) – iguais para desktop e mobile
-# =========================
-
-with st.sidebar.expander("Filtros", expanded=(view_mode == "Desktop")):
-    df = df_raw.copy()
-
-    data_min = df[COL_DATA_BASE].min().date()
-    data_max = df[COL_DATA_BASE].max().date()
-
-    periodo = st.date_input(
-        "Período",
-        value=(data_min, data_max)
-    )
-
-    if isinstance(periodo, tuple) and len(periodo) == 2:
-        inicio, fim = periodo
-        df = df[
-            (df[COL_DATA_BASE].dt.date >= inicio)
-            & (df[COL_DATA_BASE].dt.date <= fim)
-        ]
-
-    for campo in ["Origem", "Cliente", "Produto"]:
-        if campo in df.columns:
-            valores = ["Todos"] + sorted(df[campo].dropna().unique().tolist())
-            escolha = st.selectbox(campo, valores)
-            if escolha != "Todos":
-                df = df[df[campo] == escolha]
-
-if df.empty:
-    st.warning("Nenhum dado encontrado com os filtros selecionados.")
-    st.stop()
-
-GMO_COL = df.attrs.get("gmo_col", df_raw.attrs.get("gmo_col", None))
-
-
-# =========================
-# FUNÇÃO AUXILIAR – gráfico de barras
-# =========================
-
-def grafico_barras(df_in, indicador_nome, indicador_col, nivel, mobile=False):
-    # Agrupamento
-    if nivel == "Ano":
-        df_group = (
-            df_in.groupby("ano")[indicador_col]
-            .mean()
-            .reset_index()
-            .rename(columns={"ano": "eixo"})
+        anos_disponiveis = sorted(df["Ano"].unique().tolist())
+        anos_sel = st.multiselect(
+            "Ano",
+            options=anos_disponiveis,
+            default=anos_disponiveis,
         )
-        eixo_label = "Ano"
-    elif nivel == "Mês":
-        df_group = (
-            df_in.groupby("mes")[indicador_col]
-            .mean()
-            .reset_index()
-            .rename(columns={"mes": "eixo"})
-        )
-        eixo_label = "Mês"
-    elif nivel == "Dia":
-        df_group = (
-            df_in.groupby("dia")[indicador_col]
-            .mean()
-            .reset_index()
-            .rename(columns={"dia": "eixo"})
-        )
-        eixo_label = "Dia"
-    else:  # Hora
-        df_group = (
-            df_in.groupby("hora")[indicador_col]
-            .mean()
-            .reset_index()
-            .rename(columns={"hora": "eixo"})
-        )
-        eixo_label = "Hora do dia"
 
-    if df_group.empty:
-        st.warning("Nenhum dado disponível para o nível de análise selecionado.")
+        meses_disponiveis = sorted(df["Mes"].unique().tolist())
+        meses_sel = st.multiselect(
+            "Mês (1–12)",
+            options=meses_disponiveis,
+            default=meses_disponiveis,
+        )
+
+        produtos_disponiveis = sorted(df["Produto"].dropna().astype(str).unique().tolist())
+        produtos_sel = st.multiselect(
+            "Produto",
+            options=produtos_disponiveis,
+            default=produtos_disponiveis,
+        )
+
+        clientes_disponiveis = sorted(df["Cliente"].dropna().astype(str).unique().tolist())
+        clientes_sel = st.multiselect(
+            "Cliente",
+            options=clientes_disponiveis,
+            default=clientes_disponiveis,
+        )
+
+        # Filtro de período (por Data)
+        data_min = df["Data"].min()
+        data_max = df["Data"].max()
+        periodo = st.date_input(
+            "Período (Data)",
+            value=(data_min, data_max),
+        )
+
+    df_f = df.copy()
+
+    if anos_sel:
+        df_f = df_f[df_f["Ano"].isin(anos_sel)]
+
+    if meses_sel:
+        df_f = df_f[df_f["Mes"].isin(meses_sel)]
+
+    if produtos_sel:
+        df_f = df_f[df_f["Produto"].astype(str).isin(produtos_sel)]
+
+    if clientes_sel:
+        df_f = df_f[df_f["Cliente"].astype(str).isin(clientes_sel)]
+
+    if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
+        data_ini, data_fim = periodo
+        data_ini = pd.to_datetime(data_ini)
+        data_fim = pd.to_datetime(data_fim)
+        df_f = df_f[(df_f["Data"] >= data_ini) & (df_f["Data"] <= data_fim)]
+
+    return df_f
+
+
+def mostrar_big_numbers(df: pd.DataFrame):
+    """Mostra os 4 KPIs principais como métricas."""
+    st.subheader("KPIs Gerais (médias do filtro aplicado)")
+
+    if df.empty:
+        st.info("Sem dados para exibir KPIs com os filtros atuais.")
         return
 
-    fig = px.bar(
-        df_group,
-        x="eixo",
-        y=indicador_col,
-        title=f"{indicador_nome} por {eixo_label}" if not mobile else "",
-        text=indicador_col,
-        color_discrete_sequence=["#003865"],  # Azul Rumo
+    indicadores = [
+        ("Ciclo Total (h)", "Ciclo Total"),
+        ("Ciclo Interno (h)", "Ciclo Interno"),
+        ("Tempo de Viagem (h)", "Tempo de Viagem"),
+        ("Tempo de Agendamento (h)", "Tempo de Agendamento"),
+    ]
+
+    cols = st.columns(len(indicadores))
+
+    for (col_name, label), col in zip(indicadores, cols):
+        valor = df[col_name].mean()
+        with col:
+            if pd.isna(valor):
+                st.metric(label, "–")
+            else:
+                st.metric(label, f"{valor:.1f} h")
+
+
+def grafico_ciclos(df: pd.DataFrame):
+    """Gráfico de barras com colunas agrupadas por Ano (lado a lado)."""
+
+    st.subheader("Análise Temporal do Ciclo")
+
+    indicadores = {
+        "Ciclo Total (h)": "Ciclo Total (h)",
+        "Ciclo Interno (h)": "Ciclo Interno (h)",
+        "Tempo de Viagem (h)": "Tempo de Viagem (h)",
+        "Tempo de Agendamento (h)": "Tempo de Agendamento (h)",
+    }
+
+    indicador_label = st.selectbox(
+        "Indicador",
+        options=list(indicadores.keys()),
+        index=0,
     )
+    indicador_col = indicadores[indicador_label]
+
+    granularidade = st.radio(
+        "Nível de análise",
+        options=["Ano", "Mês", "Dia"],
+        index=1,  # começa em "Mês"
+        horizontal=True,
+    )
+
+    if df.empty:
+        st.warning("Sem dados para os filtros selecionados.")
+        return
+
+    # Agrupamento conforme granularidade
+    if granularidade == "Ano":
+        df_g = df.groupby("Ano", as_index=False)[indicador_col].mean()
+        x_col = "Ano"
+        fig = px.bar(
+            df_g,
+            x=x_col,
+            y=indicador_col,
+            color="Ano",
+            barmode="group",
+            text=indicador_col,
+        )
+
+    elif granularidade == "Mês":
+        df_g = df.groupby(["Ano", "Mes"], as_index=False)[indicador_col].mean()
+        df_g["MesLabel"] = df_g["Mes"].astype(str).str.zfill(2)
+        x_col = "MesLabel"
+        fig = px.bar(
+            df_g,
+            x=x_col,
+            y=indicador_col,
+            color="Ano",
+            barmode="group",  # 🔹 agrupado, não empilhado
+            text=indicador_col,
+        )
+        fig.update_layout(xaxis_title="Mês")
+
+    else:  # Dia
+        df_g = df.groupby(["Ano", "Data"], as_index=False)[indicador_col].mean()
+        x_col = "Data"
+        fig = px.bar(
+            df_g,
+            x=x_col,
+            y=indicador_col,
+            color="Ano",
+            barmode="group",
+            text=indicador_col,
+        )
+        fig.update_layout(xaxis_title="Data")
+
+    # Formatação rótulos
     fig.update_traces(
-        texttemplate="%{y:.2f}",
+        texttemplate="%{text:.1f}",
         textposition="outside",
-        cliponaxis=False,
     )
-    fig.update_xaxes(title=eixo_label)
-    fig.update_yaxes(title="Horas")
     fig.update_layout(
-        uniformtext_minsize=8,
-        uniformtext_mode="hide",
-        margin=dict(t=40 if not mobile else 10, b=40, l=40, r=20),
+        yaxis_title=f"{indicador_label}",
+        legend_title="Ano",
+        xaxis_tickangle=-45,
+        margin=dict(l=40, r=20, t=40, b=80),
     )
+
     st.plotly_chart(fig, use_container_width=True)
 
 
 # =========================
-# LAYOUT DESKTOP
+# MAIN
 # =========================
 
-if view_mode == "Desktop":
-    # BIG NUMBERS em 4 colunas
-    st.subheader("Indicadores principais (médias em horas)")
-    c1, c2, c3, c4 = st.columns(4)
+def main():
+    st.title("Controle de Ciclo Total")
 
-    c1.metric(
-        "Ciclo Total",
-        f"{df['ciclo_total_h'].mean():.2f} h" if "ciclo_total_h" in df.columns else "-",
-    )
+    df_ciclo = carregar_ciclo()
+    if df_ciclo.empty:
+        return
 
-    c2.metric(
-        "Tempo de Viagem",
-        f"{df['tempo_viagem_h'].mean():.2f} h" if "tempo_viagem_h" in df.columns else "-",
-    )
+    df_filtrado = aplicar_filtros(df_ciclo)
 
-    c3.metric(
-        "Ciclo Interno",
-        f"{df['ciclo_interno_h'].mean():.2f} h" if "ciclo_interno_h" in df.columns else "-",
-    )
-
-    c4.metric(
-        "Tempo de Agendamento",
-        f"{df['tempo_agendamento_h'].mean():.2f} h" if "tempo_agendamento_h" in df.columns else "-",
-    )
-
-    # CARD 1 – Gráfico de barras
-    st.subheader("Análise temporal do ciclo")
-
-    indicadores = {
-        "Ciclo Total": "ciclo_total_h",
-        "Tempo de Viagem": "tempo_viagem_h",
-        "Ciclo Interno": "ciclo_interno_h",
-        "Tempo de Agendamento": "tempo_agendamento_h",
-    }
-
-    indicador_nome = st.selectbox(
-        "Indicador para o gráfico",
-        list(indicadores.keys())
-    )
-    indicador_col = indicadores[indicador_nome]
-
-    nivel = st.selectbox(
-        "Nível de análise",
-        ["Ano", "Mês", "Dia", "Hora"],
-        index=1  # default Mês
-    )
-
-    grafico_barras(df, indicador_nome, indicador_col, nivel, mobile=False)
-
-    # CARD 2 – Tabela por GMO + paginação
-    st.subheader("Indicadores médios por GMO")
-
-    if GMO_COL is not None and GMO_COL in df.columns:
-        cols_indicadores = [
-            c for c in ["ciclo_total_h", "tempo_viagem_h", "ciclo_interno_h", "tempo_agendamento_h"]
-            if c in df.columns
-        ]
-
-        df_gmo = (
-            df.groupby(GMO_COL)[cols_indicadores]
-            .mean()
-            .reset_index()
-            .rename(columns={GMO_COL: "GMO"})
-        )
-
-        total_linhas = len(df_gmo)
-        if total_linhas == 0:
-            st.info("Nenhum GMO encontrado com os filtros atuais.")
-        else:
-            col_pag1, col_pag2 = st.columns(2)
-            with col_pag1:
-                page_size = st.number_input(
-                    "Linhas por página",
-                    min_value=10,
-                    max_value=500,
-                    value=50,
-                    step=10
-                )
-            num_pages = math.ceil(total_linhas / page_size)
-            with col_pag2:
-                page = st.number_input(
-                    "Página",
-                    min_value=1,
-                    max_value=max(num_pages, 1),
-                    value=1,
-                    step=1
-                )
-
-            start = int((page - 1) * page_size)
-            end = int(start + page_size)
-
-            df_page = df_gmo.iloc[start:end].copy()
-            for c in cols_indicadores:
-                df_page[c] = df_page[c].round(2)
-
-            st.dataframe(df_page, use_container_width=True)
-            st.caption(f"Página {page} de {num_pages} — Total: {total_linhas} GMOs")
-    else:
-        st.info("Nenhuma coluna de GMO encontrada na base (GMO, gmo, gmo_id...).")
+    mostrar_big_numbers(df_filtrado)
+    grafico_ciclos(df_filtrado)
 
 
-# =========================
-# LAYOUT MOBILE
-# =========================
-
-else:
-    # BIG NUMBERS empilhados (cards)
-    st.subheader("Indicadores (médias em horas)")
-
-    def card_metric(label, value):
-        st.markdown(
-            f"""
-            <div style="
-                padding: 10px 14px;
-                border-radius: 10px;
-                background-color: #003865;
-                color: white;
-                margin-bottom: 8px;
-            ">
-                <div style="font-size: 14px; opacity: 0.8;">{label}</div>
-                <div style="font-size: 22px; font-weight: bold;">{value}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    card_metric(
-        "Ciclo Total",
-        f"{df['ciclo_total_h'].mean():.2f} h" if "ciclo_total_h" in df.columns else "-"
-    )
-    card_metric(
-        "Tempo de Viagem",
-        f"{df['tempo_viagem_h'].mean():.2f} h" if "tempo_viagem_h" in df.columns else "-"
-    )
-    card_metric(
-        "Ciclo Interno",
-        f"{df['ciclo_interno_h'].mean():.2f} h" if "ciclo_interno_h" in df.columns else "-"
-    )
-    card_metric(
-        "Tempo de Agendamento",
-        f"{df['tempo_agendamento_h'].mean():.2f} h" if "tempo_agendamento_h" in df.columns else "-"
-    )
-
-    st.markdown("---")
-
-    # Gráfico mais enxuto
-    indicadores = {
-        "Ciclo Total": "ciclo_total_h",
-        "Tempo de Viagem": "tempo_viagem_h",
-        "Ciclo Interno": "ciclo_interno_h",
-        "Tempo de Agendamento": "tempo_agendamento_h",
-    }
-
-    indicador_nome = st.selectbox(
-        "Indicador",
-        list(indicadores.keys())
-    )
-    indicador_col = indicadores[indicador_nome]
-
-    nivel = st.selectbox(
-        "Nível",
-        ["Mês", "Dia", "Ano", "Hora"],
-        index=0
-    )
-
-    grafico_barras(df, indicador_nome, indicador_col, nivel, mobile=True)
-
-    # Tabela por GMO mais enxuta (página menor)
-    st.subheader("GMOs (médias dos indicadores)")
-
-    if GMO_COL is not None and GMO_COL in df.columns:
-        cols_indicadores = [
-            c for c in ["ciclo_total_h", "tempo_viagem_h", "ciclo_interno_h", "tempo_agendamento_h"]
-            if c in df.columns
-        ]
-
-        df_gmo = (
-            df.groupby(GMO_COL)[cols_indicadores]
-            .mean()
-            .reset_index()
-            .rename(columns={GMO_COL: "GMO"})
-        )
-
-        total_linhas = len(df_gmo)
-        if total_linhas == 0:
-            st.info("Nenhum GMO encontrado com os filtros atuais.")
-        else:
-            page_size = 20  # mobile: página menor
-            num_pages = math.ceil(total_linhas / page_size)
-            page = st.number_input(
-                "Página",
-                min_value=1,
-                max_value=max(num_pages, 1),
-                value=1,
-                step=1
-            )
-
-            start = int((page - 1) * page_size)
-            end = int(start + page_size)
-
-            df_page = df_gmo.iloc[start:end].copy()
-            for c in cols_indicadores:
-                df_page[c] = df_page[c].round(2)
-
-            st.dataframe(df_page, use_container_width=True, height=300)
-            st.caption(f"Pág. {page}/{num_pages} — GMOs: {total_linhas}")
-    else:
-        st.info("Nenhuma coluna de GMO encontrada na base (GMO, gmo, gmo_id...).")
+if __name__ == "__main__":
+    main()
