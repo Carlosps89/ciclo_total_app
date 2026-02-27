@@ -64,23 +64,12 @@ export default function LoginPage() {
           {/* Top highlight bar */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#32a3dd]/50 to-transparent" />
 
-          {/* RUMO LOGO (Official Reproduction) */}
+          {/* Official Branding Area */}
           <div className="mb-10 flex flex-col items-center">
-            <svg viewBox="0 0 240 80" className="w-48 h-16 text-white fill-current">
-              {/* Lowercase "rumo" text reproduction using paths for precision */}
-              <path d="M15 45c0-10 8-15 20-15h5v25h-5v-18h-2c-8 0-13 4-13 10v8h-5v-10zM55 30h5v25h-5v-3h-1c-3 3-7 5-11 5-8 0-14-6-14-14s6-14 14-14c4 0 8 2 11 5v-4zm-11 19c5 0 10-4 10-10s-5-10-10-10-10 4-10 10 5 10 10 10zM75 30h5v3c3-3 7-5 11-5 8 0 14 6 14 14s-6 14-14 14c-4 0-8-2-11-5v13h-5V30zm16 19c5 0 10-4 10-10s-5-10-10-10-10 4-10 10 5 10 10 10zM140 43c0 8-6 14-14 14s-14-6-14-14c0-8 6-14 14-14s14 6 14 14zm-14 9c5 0 9-4 9-9s-4-9-9-9-9 4-9 9 4 9 9 9z" transform="translate(0, -5)" />
-              
-              {/* Circular Swirl Icon */}
-              <g transform="translate(160, 30) scale(0.6)">
-                <path d="M30 0C13.5 0 0 13.5 0 30c0 1.5.1 3 .3 4.5l14-4.5c-.2-1-.3-2-.3-3 0-9 7.3-16.3 16.3-16.3 1 0 2 .1 3 .3L38 1s-4-1-8-1z" opacity="0.9" />
-                <path d="M60 30c0 16.5-13.5 30-30 30-1.5 0-3-.1-4.5-.3l4.5-14c1 .2 2 .3 3 .3 9 0 16.3-7.3 16.3-16.3 0-1-.1-2-.3-3L59 22s1 4 1 8z" opacity="0.8" />
-                <path d="M0 30C0 13.5 13.5 0 30 0c1.5 0 3 .1 4.5.3l-4.5 14c-1-.2-2-.3-3-.3-9 0-16.3 7.3-16.3 16.3 0 1 .1 2 .3 3L1 38s-1-4-1-8z" opacity="0.7" />
-              </g>
-            </svg>
-            
-            <h2 className="text-sm font-black text-white/90 mt-4 tracking-[4px] uppercase text-center border-t border-white/10 pt-4 w-full">
+            <h1 className="text-2xl font-black text-white tracking-[4px] uppercase text-center leading-tight">
               Centro de Controle Rodoviário
-            </h2>
+            </h1>
+            <div className="w-12 h-1 bg-[#32a3dd] mt-6 rounded-full opacity-50" />
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
