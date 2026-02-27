@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const terminal = searchParams.get('terminal') || 'TRO';
         const produto = searchParams.get('produto');
 
-        const cacheKey = `pac_performance_monthly_v3_${terminal}_${produto || 'all'}`;
+        const cacheKey = `pac_performance_monthly_v4_${terminal}_${produto || 'all'}`;
         const cachedData = getCached(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
@@ -57,42 +57,45 @@ export async function GET(request: Request): Promise<NextResponse> {
                     ${pracaMapper} as praca_nome,
                     count(distinct c.gmo_id) as volume,
                     
-                    -- Cycle Total
+                    -- Cycle Total (Less is Better)
                     avg(c.ciclo_total_h) as avg_h,
                     min(c.ciclo_total_h) as best_case_total,
                     approx_percentile(c.ciclo_total_h, 0.75) as p75_total,
                     approx_percentile(c.ciclo_total_h, 0.25) as p25_total,
                     approx_percentile(c.ciclo_total_h, 0.10) as p10_total,
 
-                    -- Agendamento
+                    -- Agendamento (Less is Better)
                     avg(c.aguardando_agendamento_h) as avg_agend,
                     approx_percentile(c.aguardando_agendamento_h, 0.75) as p75_agend,
                     approx_percentile(c.aguardando_agendamento_h, 0.25) as p25_agend,
                     approx_percentile(c.aguardando_agendamento_h, 0.10) as p10_agend,
 
-                    -- Viagem
+                    -- Viagem (Less is Better)
                     avg(c.tempo_viagem_h) as avg_viagem,
                     approx_percentile(c.tempo_viagem_h, 0.75) as p75_viagem,
                     approx_percentile(c.tempo_viagem_h, 0.25) as p25_viagem,
                     approx_percentile(c.tempo_viagem_h, 0.10) as p10_viagem,
 
-                    -- Área Verde
+                    -- Área Verde (N/A for percentiles in simple avg sense but let's keep consistency)
                     avg(c.area_verde_cheguei_h) as avg_verde,
                     approx_percentile(c.area_verde_cheguei_h, 0.75) as p75_verde,
                     approx_percentile(c.area_verde_cheguei_h, 0.25) as p25_verde,
                     approx_percentile(c.area_verde_cheguei_h, 0.10) as p10_verde,
 
-                    -- Interno
+                    -- Interno (Less is Better)
                     avg(c.tempo_interno_h) as avg_interno,
                     approx_percentile(c.tempo_interno_h, 0.75) as p75_interno,
                     approx_percentile(c.tempo_interno_h, 0.25) as p25_interno,
                     approx_percentile(c.tempo_interno_h, 0.10) as p10_interno,
 
-                    -- Antecipação
+                    -- Antecipação (MORE is Better)
+                    -- For Antecipacao, "Elite P10" = Best 10% = 90th Percentile
+                    -- "Bench P25" = Best 25% = 75th Percentile
+                    -- "Resto 75%" = Bottom 75% (the value below which only 25% of trucks fall) = 25th Percentile
                     avg(case when c.is_antecipado = 1 then c.antecipacao_h end) as avg_antecip,
-                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.75) as p75_antecip,
-                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.25) as p25_antecip,
-                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.10) as p10_antecip
+                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.25) as p75_antecip, -- Resto
+                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.75) as p25_antecip, -- Bench
+                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.90) as p10_antecip  -- Elite
 
                 FROM calc c
                 WHERE c.peso_saida >= timestamp '${startOfMonth}' 
@@ -128,8 +131,6 @@ export async function GET(request: Request): Promise<NextResponse> {
 
         const pracas = rows.map((r: Row) => {
             const d = r.Data || [];
-            // d[0..3] are summary fields
-            // d[4] is praca_nome
             return {
                 name: d[4]?.VarCharValue || 'OUTROS',
                 volume: parseInt(d[5]?.VarCharValue || '0'),
@@ -187,6 +188,6 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     } catch (error) {
         console.error("Monthly Performance API Error:", error);
-        return NextResponse.json({ error: 'Failed to fetch performance' }, { status: 500 });
+        return NextResponse.json({ error: 'Failed' }, { status: 500 });
     }
 }

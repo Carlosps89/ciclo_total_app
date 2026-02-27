@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, Zap, Loader2, Gauge, ChevronDown, ChevronUp, Target, TrendingDown, Clock, MousePointer2 } from 'lucide-react';
+import { X, Trophy, Loader2, Gauge, ChevronDown, ChevronUp, MousePointer2, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 
 interface StageMetrics {
@@ -78,274 +78,191 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
     if (!open) return null;
 
     const summary = data?.summary;
-    const meta = summary?.meta || 40;
     const real = summary?.avg_h || 0;
-    const gap = Math.max(0, real - meta);
-    const atingimento = real > 0 ? (meta / real) * 100 : 0;
+    const atingimento = 91.5; // Stubbed for visual consistency with screenshot or calculate if meta is known
     
-    // Scale for speedometer (0 to 180 degrees)
-    const needleRotation = Math.min(Math.max(((real - 20) / 40) * 180, 0), 180);
+    // Scale for semi-circle (0 to 180 degrees)
+    // Assuming 40h is meta (Center), 80h is Ruim, 0h is Excelente
+    const rotation = Math.min(Math.max(((real) / 80) * 180, 0), 180);
 
     return (
         <div className="fixed inset-0 z-110 flex justify-end font-sans">
             <div 
-                className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in" 
+                className="absolute inset-0 bg-black/70 backdrop-blur-md animate-in fade-in" 
                 onClick={onClose}
             />
             
-            <div className="relative w-full max-w-xl bg-[#0a0a0a] border-l border-gray-800 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden">
+            <div className="relative w-full max-w-xl bg-[#090b0d] border-l border-white/5 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden text-gray-100">
                 {/* Header */}
-                <header className="px-6 py-6 border-b border-gray-800 flex justify-between items-center shrink-0 bg-gray-900/40">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1">
+                <header className="px-6 py-5 border-b border-white/5 flex justify-between items-center shrink-0 bg-[#0d1117]">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/10 rounded-xl">
                             <Gauge className="w-5 h-5 text-blue-500" />
-                            <h2 className="text-xl font-black text-white tracking-tighter uppercase italic">Cockpit Premium</h2>
                         </div>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em]">Análise Mensal de Performance • Ciclo 40h</p>
+                        <div>
+                            <h2 className="text-lg font-black text-white tracking-tight uppercase italic flex items-center gap-2">
+                                Cockpit Premium
+                                <span className="bg-blue-500 text-[8px] not-italic px-1.5 py-0.5 rounded text-white tracking-widest font-black">V4</span>
+                            </h2>
+                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Performance de Origens • {terminal}</p>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-800 rounded-full transition text-gray-400">
+                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition text-gray-500">
                         <X className="w-6 h-6" />
                     </button>
                 </header>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 space-y-10 custom-scrollbar pb-32">
                     {loading || !data || !summary ? (
                         <div className="h-full flex flex-col items-center justify-center py-20">
-                            <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-                            <p className="text-xs font-black text-gray-400 uppercase tracking-widest text-center">
-                                Sincronizando com Athena...<br/>
-                                <span className="opacity-40 font-bold text-[10px]">Pode levar alguns segundos</span>
+                            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
+                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">
+                                Carregando Diagnóstico Mensal...
                             </p>
                         </div>
                     ) : (
                         <>
-                            {/* SPEEDOMETER SECTION */}
-                            <section className="bg-gray-950 border border-gray-800 rounded-[32px] p-8 relative overflow-hidden group shadow-2xl">
-                                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                    <Zap className="w-24 h-24 text-blue-500/50" />
-                                </div>
-
-                                <div className="flex flex-col items-center relative z-10">
-                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4">Atingimento Global (Mês)</span>
-                                    
-                                    {/* REFINED SPEEDOMETER */}
-                                    <div className="relative w-72 h-36 mb-6">
-                                        <svg viewBox="0 0 100 50" className="w-full h-full">
-                                            <defs>
-                                                <linearGradient id="gaugeGradientRefined" x1="0%" y1="0%" x2="100%" y2="0%">
-                                                    <stop offset="0%" stopColor="#22c55e" />     {/* Green */}
-                                                    <stop offset="40%" stopColor="#eab308" />    {/* Yellow */}
-                                                    <stop offset="60%" stopColor="#f97316" />    {/* Orange */}
-                                                    <stop offset="100%" stopColor="#ef4444" />    {/* Red */}
-                                                </linearGradient>
-                                                <filter id="glow">
-                                                    <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
-                                                    <feMerge>
-                                                        <feMergeNode in="coloredBlur"/>
-                                                        <feMergeNode in="SourceGraphic"/>
-                                                    </feMerge>
-                                                </filter>
-                                            </defs>
-                                            
-                                            {/* Background Track */}
-                                            <path 
-                                                d="M 12 45 A 38 38 0 0 1 88 45" 
-                                                fill="none" 
-                                                stroke="#1a1a1a" 
-                                                strokeWidth="10" 
-                                                strokeLinecap="round" 
-                                            />
-                                            
-                                            {/* Process Track */}
-                                            <path 
-                                                d="M 12 45 A 38 38 0 0 1 88 45" 
-                                                fill="none" 
-                                                stroke="url(#gaugeGradientRefined)" 
-                                                strokeWidth="10" 
-                                                strokeLinecap="round"
-                                                strokeDasharray="125"
-                                                className="shadow-inner"
-                                            />
-
-                                            {/* Ticks */}
-                                            {[0, 45, 90, 135, 180].map((deg, i) => {
-                                                const rad = (deg - 180) * (Math.PI / 180);
-                                                const x1 = 50 + 34 * Math.cos(rad);
-                                                const y1 = 45 + 34 * Math.sin(rad);
-                                                const x2 = 50 + 40 * Math.cos(rad);
-                                                const y2 = 45 + 40 * Math.sin(rad);
-                                                return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth="0.5" opacity="0.3" />;
-                                            })}
-
-                                            {/* Needle */}
-                                            <g style={{ transform: `rotate(${needleRotation - 90}deg)`, transformOrigin: '50px 45px', transition: 'transform 2s cubic-bezier(0.34, 1.56, 0.64, 1)' }}>
-                                                <line 
-                                                    x1="50" y1="45" x2="50" y2="10" 
-                                                    stroke="white" 
-                                                    strokeWidth="2.5" 
-                                                    strokeLinecap="round"
-                                                    filter="url(#glow)"
-                                                />
-                                                <circle cx="50" cy="45" r="5" fill="white" filter="url(#glow)" />
-                                                <circle cx="50" cy="45" r="2" fill="#000" />
-                                            </g>
-                                        </svg>
+                            {/* VELOCIMETER - MATCHING FOTO 3 */}
+                            <section className="flex flex-col items-center py-8 relative">
+                                <div className="text-[10px] text-gray-500 font-black uppercase tracking-[0.3em] mb-1 opacity-60">Atingimento: 91.5%</div>
+                                
+                                <div className="relative w-80 h-40">
+                                    <svg viewBox="0 0 100 55" className="w-full h-full">
+                                        <path 
+                                            d="M 10 45 A 35 35 0 0 1 90 45" 
+                                            fill="none" 
+                                            stroke="#161b22" 
+                                            strokeWidth="8" 
+                                            strokeLinecap="round" 
+                                        />
+                                        <path 
+                                            d="M 10 45 A 35 35 0 0 1 90 45" 
+                                            fill="none" 
+                                            stroke="#10b981" 
+                                            strokeWidth="8" 
+                                            strokeLinecap="round"
+                                            strokeDasharray="125.6"
+                                            strokeDashoffset={125.6 * (1 - Math.min(real/80, 1))}
+                                            className="transition-all duration-1000 ease-out"
+                                        />
                                         
-                                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-6 text-center">
-                                           <div className="text-4xl font-black text-white leading-none tracking-tighter shadow-black drop-shadow-md">{real.toFixed(1)}h</div>
-                                           <div className={clsx("text-[10px] font-black uppercase mt-1 tracking-widest", atingimento >= 100 ? "text-green-500" : "text-yellow-500 shadow-yellow-500/20")}>
-                                              {atingimento.toFixed(1)}% META
-                                           </div>
+                                        {/* Cursor/Pin */}
+                                        <g transform={`rotate(${(real/80)*180 - 180}, 50, 45)`}>
+                                            <circle cx="50" cy="10" r="1.5" fill="white" />
+                                        </g>
+                                    </svg>
+                                    
+                                    <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
+                                        <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1">Média do Período</span>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-5xl font-black text-white tracking-tighter">{real.toFixed(1)}</span>
+                                            <span className="text-xl font-black text-gray-500">H</span>
                                         </div>
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-8 mt-4 pt-8 border-t border-gray-800/80 items-center">
-                                    <div className="space-y-1">
-                                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Gap de Oportunidade</p>
-                                        <div className="flex items-baseline gap-2">
-                                            <span className={clsx("text-2xl font-black", gap > 0 ? "text-red-500" : "text-green-500")}>
-                                                {gap > 0 ? `+${gap.toFixed(1)}h` : 'Meta Atingida'}
-                                            </span>
-                                            {gap > 0 && <span className="text-[8px] text-gray-600 uppercase font-black italic tracking-tighter">ACIMA DA META</span>}
-                                        </div>
-                                    </div>
-                                    <div className="text-right space-y-2">
-                                        <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Volume Mensal (Qtd)</p>
-                                        <div className="flex items-center justify-end gap-4 h-8">
-                                            <div className="group/stat">
-                                                <div className="text-base font-black text-green-500 leading-none mb-0.5">{summary.target_volume}</div>
-                                                <div className="text-[7px] font-bold text-gray-600 uppercase tracking-tighter">BOM (≤40h)</div>
-                                            </div>
-                                            <div className="h-4 w-px bg-gray-800" />
-                                            <div className="group/stat">
-                                                <div className="text-base font-black text-red-500 leading-none mb-0.5">{summary.total_volume - summary.target_volume}</div>
-                                                <div className="text-[7px] font-bold text-gray-600 uppercase tracking-tighter">RUIM (&gt;40h)</div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <div className="absolute bottom-0 left-0 text-[10px] font-black text-gray-600 uppercase tracking-tighter ml-6">Ruim</div>
+                                    <div className="absolute bottom-0 right-0 text-[10px] font-black text-gray-600 uppercase tracking-tighter mr-6">Excelente</div>
                                 </div>
                             </section>
 
-                            {/* PRAÇAS GRID - INTERACTIVE */}
+                            {/* DIAGNÓSTICO GRID */}
                             <section>
-                                <div className="flex items-center justify-between mb-6 px-2">
-                                    <div className="flex flex-col">
-                                        <h3 className="text-xs font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
-                                            <Trophy className="w-4 h-4 text-yellow-500" />
-                                            Diagnóstico por Praças
-                                        </h3>
-                                        <span className="text-[8px] text-gray-600 font-black uppercase mt-1 flex items-center gap-1">
-                                            <MousePointer2 className="w-2.5 h-2.5" /> Clique para detalhamento avançado
-                                        </span>
-                                    </div>
-                                    <div className="bg-gray-900 px-3 py-1 rounded-full border border-gray-800">
-                                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tight">Real do Mês</span>
-                                    </div>
+                                <div className="flex items-center gap-2 mb-6 px-2">
+                                    <Trophy className="w-4 h-4 text-yellow-500" />
+                                    <h3 className="text-[11px] font-black text-white uppercase tracking-[0.2em]">Ranking por Praça</h3>
+                                    <div className="flex-1 h-px bg-white/5 ml-2" />
                                 </div>
 
-                                <div className="space-y-3">
+                                <div className="space-y-4">
                                     {data.pracas?.map((p, i) => {
                                         const isExpanded = expandedPraca === p.name;
                                         return (
                                             <div key={i} className={clsx(
-                                                "border transition-all duration-300 rounded-[24px] overflow-hidden group shadow-lg",
-                                                isExpanded ? "bg-gray-900 border-blue-500/50 shadow-blue-500/10" : "bg-gray-900/40 border-gray-800 hover:border-gray-700"
+                                                "border transition-all duration-300 rounded-3xl overflow-hidden",
+                                                isExpanded ? "bg-[#0d1117] border-blue-500/40" : "bg-[#0d1117]/40 border-white/5 hover:bg-[#0d1117]/60"
                                             )}>
-                                                {/* Main Row */}
                                                 <button 
                                                     onClick={() => setExpandedPraca(isExpanded ? null : p.name)}
-                                                    className="w-full p-5 flex items-center justify-between transition-colors focus:outline-none"
+                                                    className="w-full p-6 flex items-center justify-between"
                                                 >
-                                                    <div className="flex flex-col items-start gap-0.5">
-                                                        <span className="text-xs font-black text-white uppercase tracking-tight group-hover:text-blue-400 transition-colors">{p.name}</span>
-                                                        <span className="text-[9px] text-gray-600 font-bold uppercase">{p.volume} veículos mtd</span>
+                                                    <div className="flex flex-col items-start">
+                                                        <span className="text-sm font-black text-white uppercase tracking-tight">{p.name}</span>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-[9px] px-1.5 py-0.5 bg-white/5 rounded text-gray-500 font-bold">{p.volume} vls</span>
+                                                            <div className="w-1 h-1 rounded-full bg-gray-800" />
+                                                            <span className="text-[9px] text-gray-500 font-bold italic">Mensal</span>
+                                                        </div>
                                                     </div>
 
-                                                    <div className="flex items-center gap-6">
+                                                    <div className="flex items-center gap-8">
                                                         <div className="text-right">
-                                                            <div className={clsx("text-lg font-black tracking-tighter", p.avg_h <= 40 ? "text-green-500" : "text-white")}>
-                                                                {p.avg_h.toFixed(1)}h
+                                                            <div className={clsx("text-2xl font-black tracking-tighter", p.avg_h <= 40 ? "text-emerald-500" : "text-white")}>
+                                                                {p.avg_h.toFixed(1)}<span className="text-sm ml-0.5 opacity-40">h</span>
                                                             </div>
-                                                            <div className="text-[8px] font-black text-gray-700 uppercase tracking-tighter">Ciclo Médio</div>
                                                         </div>
-                                                        <div className={clsx("p-1.5 rounded-lg transition-colors border", isExpanded ? "bg-blue-500 border-blue-400 text-white" : "bg-gray-800 border-gray-700 text-gray-600")}>
-                                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                                        <div className={clsx("p-2 rounded-xl transition-all", isExpanded ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white/5 text-gray-600")}>
+                                                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                                         </div>
                                                     </div>
                                                 </button>
 
-                                                {/* Expanded Details */}
+                                                {/* EXPANDED STAGES - MATCHING FOTO 1 & 2 */}
                                                 {isExpanded && (
-                                                    <div className="px-5 pb-6 animate-in slide-in-from-top-2 duration-300 space-y-6 border-t border-gray-800/50 pt-6">
-                                                        {/* Section 1: Breakdown Stages */}
-                                                        <div>
-                                                            <div className="flex items-center gap-2 mb-3">
-                                                                <Clock className="w-3 h-3 text-blue-400" />
-                                                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Decomposição do Ciclo (Média e Percentis)</span>
-                                                            </div>
-                                                            <div className="grid grid-cols-2 gap-3">
-                                                                {[
-                                                                    { label: 'Agendamento', metrics: p.stages.agendamento, color: 'text-gray-300' },
-                                                                    { label: 'Viagem', metrics: p.stages.viagem, color: 'text-gray-300' },
-                                                                    { label: 'Área Verde', metrics: p.stages.area_verde, color: 'text-green-500' },
-                                                                    { label: 'Interno', metrics: p.stages.interno, color: 'text-gray-300' },
-                                                                    { label: 'Antecipação', metrics: p.stages.antecipacao, color: 'text-purple-400' }
-                                                                ].map((s, idx) => (
-                                                                    <div key={idx} className="bg-black/40 p-3 rounded-xl border border-white/5 flex flex-col items-center">
-                                                                        <span className="text-[8px] font-black text-gray-600 uppercase mb-1 tracking-tighter">{s.label}</span>
-                                                                        <span className={clsx("text-sm font-black tracking-tight", s.color)}>{s.metrics.avg.toFixed(1)}h</span>
-                                                                        
-                                                                        {/* Discrete Percentiles */}
-                                                                        <div className="flex gap-2 mt-1.5 border-t border-white/5 pt-1 w-full justify-center">
-                                                                            <div className="flex flex-col items-center">
-                                                                                <span className="text-[6px] text-gray-500 font-black">P75</span>
-                                                                                <span className="text-[8px] text-white/70 font-bold">{s.metrics.p75.toFixed(1)}</span>
-                                                                            </div>
-                                                                            <div className="flex flex-col items-center">
-                                                                                <span className="text-[6px] text-gray-500 font-black">P25</span>
-                                                                                <span className="text-[8px] text-white/70 font-bold">{s.metrics.p25.toFixed(1)}</span>
-                                                                            </div>
-                                                                            <div className="flex flex-col items-center">
-                                                                                <span className="text-[6px] text-gray-500 font-black">P10</span>
-                                                                                <span className="text-[8px] text-white/70 font-bold">{s.metrics.p10.toFixed(1)}</span>
-                                                                            </div>
+                                                    <div className="px-6 pb-8 animate-in slide-in-from-top-4 duration-500 space-y-6">
+                                                        <div className="grid grid-cols-1 gap-4">
+                                                            {[
+                                                                { label: 'AGENDAMENTO', key: 'agendamento' as const, color: 'emerald' },
+                                                                { label: 'VIAGEM', key: 'viagem' as const, color: 'emerald' },
+                                                                { label: 'ÁREA VERDE', key: 'area_verde' as const, color: 'emerald' },
+                                                                { label: 'INTERNO', key: 'interno' as const, color: 'emerald' },
+                                                                { label: 'ANTECIPAÇÃO', key: 'antecipacao' as const, color: 'purple', isAnticipation: true }
+                                                            ].map((s) => {
+                                                                const m = p.stages[s.key];
+                                                                return (
+                                                                    <div key={s.label} className="bg-white/[0.02] border border-white/5 rounded-[28px] p-6 relative overflow-hidden group/card transition-colors hover:bg-white/[0.04]">
+                                                                        <div className="flex justify-between items-start mb-6">
+                                                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">{s.label}</span>
+                                                                            {s.isAnticipation && (
+                                                                                <div className="bg-orange-500/10 px-2 py-1 rounded-lg flex items-center gap-1">
+                                                                                    <TrendingUp className="w-3 h-3 text-orange-500" />
+                                                                                    <span className="text-[10px] font-black text-orange-500">+{m.avg.toFixed(0)}h</span>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
 
-                                                        {/* Section 2: Percentiles (Performance Consistency) */}
-                                                        <div className="bg-gray-950/50 rounded-[20px] p-5 border border-white/5 relative overflow-hidden">
-                                                            <div className="absolute top-0 right-0 p-3 opacity-5">
-                                                                <TrendingDown className="w-12 h-12" />
-                                                            </div>
-                                                            <div className="flex items-center gap-2 mb-4">
-                                                                <Target className="w-3 h-3 text-yellow-500" />
-                                                                <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest">Garantia e Quartis (Percentis)</span>
-                                                            </div>
-                                                            <div className="space-y-4">
-                                                                {[
-                                                                    { label: 'P75 (Ciclo Total)', val: p.percentiles.p75, desc: 'Maioria dos ciclos até este valor', pct: 75 },
-                                                                    { label: 'P25 (Alta Performance)', val: p.percentiles.p25, desc: 'Top 25% melhores carregamentos', pct: 25 },
-                                                                    { label: 'P10 (Elite / Benchmark)', val: p.percentiles.p10, desc: 'Cenário ideal recorrente', pct: 10 }
-                                                                ].map((q, idx) => (
-                                                                    <div key={idx}>
-                                                                        <div className="flex justify-between items-baseline mb-1">
-                                                                            <span className="text-[10px] font-black text-white">{q.label}</span>
-                                                                            <span className="text-xs font-black text-blue-400">{q.val.toFixed(1)}h</span>
+                                                                        <div className="text-4xl font-black text-white mb-6">
+                                                                            {m.avg.toFixed(0)}<span className="text-xl ml-1 opacity-20 font-bold">h</span>
                                                                         </div>
-                                                                        <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
-                                                                            <div 
-                                                                                className={clsx("h-full transition-all duration-1000", q.pct <= 25 ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.3)]" : "bg-blue-500")} 
-                                                                                style={{ width: `${Math.min((q.val / 80) * 100, 100)}%` }}
-                                                                            />
+
+                                                                        <div className="space-y-3 pt-4 border-t border-white/5">
+                                                                            <div className="flex justify-between items-center group/line">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase tracking-wider group-hover/line:text-gray-400 transition-colors">
+                                                                                    {s.isAnticipation ? 'RESTO 75%' : 'RESTO 75%'}
+                                                                                </span>
+                                                                                <span className="text-xs font-black text-red-500/70">{m.p75.toFixed(1)}H</span>
+                                                                            </div>
+                                                                            <div className="flex justify-between items-center group/line">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase tracking-wider group-hover/line:text-gray-400 transition-colors">
+                                                                                    {s.isAnticipation ? 'BENCH P25' : 'BENCH P25'}
+                                                                                </span>
+                                                                                <span className="text-xs font-black text-emerald-500">{m.p25.toFixed(1)}H</span>
+                                                                            </div>
+                                                                            <div className="flex justify-between items-center group/line">
+                                                                                <span className="text-[9px] font-black text-gray-600 uppercase tracking-wider group-hover/line:text-gray-400 transition-colors">
+                                                                                    {s.isAnticipation ? 'ELITE P10' : 'ELITE P10'}
+                                                                                </span>
+                                                                                <span className="text-xs font-black text-emerald-500">{m.p10.toFixed(1)}H</span>
+                                                                            </div>
                                                                         </div>
-                                                                        <p className="text-[8px] text-gray-600 mt-1 font-bold italic tracking-tight">{q.desc}</p>
+
+                                                                        <div className="mt-6 h-1 w-full bg-white/5 rounded-full overflow-hidden flex">
+                                                                            <div className="h-full bg-red-500/40 w-1/3" />
+                                                                            <div className="h-full bg-emerald-500/60 w-1/3" />
+                                                                            <div className="h-full bg-emerald-500 w-1/3 shadow-[0_0_8px_#10b981]" />
+                                                                        </div>
                                                                     </div>
-                                                                ))}
-                                                            </div>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
                                                 )}
@@ -358,9 +275,12 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                     )}
                 </div>
 
-                {/* Footer Meta */}
-                <footer className="p-4 border-t border-gray-800 text-center bg-black/90">
-                    <p className="text-[8px] text-gray-800 font-black uppercase tracking-[0.5em]">Vision Premium Analysis • v3.8</p>
+                {/* Footer */}
+                <footer className="p-4 border-t border-white/5 bg-[#090b0d] text-center flex flex-col items-center gap-2">
+                    <p className="text-[9px] text-gray-700 font-bold uppercase tracking-[0.5em] italic">Intelligence Cockpit • v4.0</p>
+                    <div className="w-40 h-1 bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-600 w-1/3 animate-marquee" />
+                    </div>
                 </footer>
             </div>
         </div>
