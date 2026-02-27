@@ -59,9 +59,11 @@ function DashboardContent() {
   const [countdown, setCountdown] = useState<number>(60);
   const [session, setSession] = useState<any>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [mounted, setMounted] = useState<boolean>(false);
 
-  // Responsive Check
+  // Responsive Check & Mounting
   useEffect(() => {
+    setMounted(true);
     const checkMobile = () => setIsMobile(window.innerWidth < 1024);
     checkMobile();
     window.addEventListener('resize', checkMobile);
@@ -430,7 +432,7 @@ function DashboardContent() {
     </div>
   );
 
-  if (isMobile) return <MobileDashboard />;
+  if (mounted && isMobile) return <MobileDashboard />;
 
   return (
     <div
