@@ -46,7 +46,7 @@ export default function LoginPage() {
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: "url('/images/login-bg.png')" }}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-[#010b1a]/95 via-[#001a33]/85 to-[#010b1a]/95" />
+      <div className="absolute inset-0 bg-linear-to-b from-[#010b1a]/95 via-[#001a33]/85 to-[#010b1a]/95" />
       
       {/* Decorative Lights */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#002d5a]/40 rounded-full blur-[120px]" />

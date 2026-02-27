@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, Loader2, Gauge, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import { X, Trophy, Loader2, Gauge, ChevronDown, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 
 interface StageMetrics {
@@ -235,7 +235,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                                         ].map((s) => {
                                                             const m = p.stages[s.key];
                                                             return (
-                                                                <div key={s.label} className="bg-white/[0.02] border border-white/[0.05] rounded-[32px] p-7 relative group/card hover:border-white/10 hover:bg-white/[0.04] transition-all">
+                                                                <div key={s.label} className="bg-white/2 border border-white/5 rounded-[32px] p-7 relative group/card hover:border-white/10 hover:bg-white/4 transition-all">
                                                                     <div className="flex justify-between items-start mb-6">
                                                                         {/* TITLE HIGHLIGHT - ENHANCED FOCUS */}
                                                                         <span className="text-[11px] font-black text-white bg-blue-600/20 px-3 py-1 rounded-lg uppercase tracking-[0.3em] border border-blue-500/20 shadow-sm">
@@ -254,7 +254,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                                                         <span className="text-2xl font-black text-gray-700 italic">h</span>
                                                                     </div>
 
-                                                                    <div className="space-y-4 pt-6 border-t border-white/[0.05]">
+                                                                    <div className="space-y-4 pt-6 border-t border-white/5">
                                                                         <div className="flex justify-between items-center group/line">
                                                                             <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest group-hover/line:text-gray-300 transition-colors italic">Resto 75%</span>
                                                                             <span className={clsx("text-sm font-black transition-colors", s.isAnticipation ? "text-emerald-500/50" : "text-red-500/60 group-hover/line:text-red-500")}>

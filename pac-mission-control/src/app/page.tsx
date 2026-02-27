@@ -305,7 +305,7 @@ function DashboardContent() {
       <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] min-h-screen font-sans animate-in fade-in duration-500 overflow-x-hidden">
         {/* MOBILE SIDE BAR */}
         {isMenuOpen && (
-            <div className="fixed inset-0 z-[100] flex">
+            <div className="fixed inset-0 z-100 flex">
                 <div 
                     className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" 
                     onClick={() => setIsMenuOpen(false)}
@@ -583,7 +583,7 @@ function DashboardContent() {
       )}>
       {/* WEB SIDE BAR (Shared Logic) */}
       {isMenuOpen && (
-          <div className="fixed inset-0 z-[100] flex">
+          <div className="fixed inset-0 z-100 flex">
               <div 
                   className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" 
                   onClick={() => setIsMenuOpen(false)}
@@ -1128,7 +1128,7 @@ function DashboardContent() {
                 </div>
 
                 {/* VISUAL GRADIENT FADE FOR CAROUSEL */}
-                <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-gray-950/80 to-transparent pointer-events-none z-10"></div>
+                <div className="absolute right-0 top-0 bottom-0 w-20 bg-linear-to-l from-gray-950/80 to-transparent pointer-events-none z-10"></div>
             </div>
         </div>
       </div>

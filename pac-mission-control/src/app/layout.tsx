@@ -16,12 +16,18 @@ const robotoMono = Roboto_Mono({
   variable: "--font-mono",
 });
 
+export const viewport = {
+  themeColor: "#010b1a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export const metadata: Metadata = {
   title: "CCO - RUMO",
   description: "Centro de Controle Rodoviário - Ciclo Total",
   manifest: "/manifest.json",
-  themeColor: "#010b1a",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
