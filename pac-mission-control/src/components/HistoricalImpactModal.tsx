@@ -312,19 +312,19 @@ export default function HistoricalImpactModal({
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-[10px] font-bold uppercase">
                                     <span className="text-emerald-500">Dentro da Meta (&le; 40h)</span>
-                                    <span className="text-white">{data.vol_within} ({((data.vol_within / data.vol_total) * 100).toFixed(0)}%)</span>
+                                    <span className="text-white">{data.vol_within || 0} ({data.vol_total > 0 ? ((data.vol_within / data.vol_total) * 100).toFixed(0) : 0}%)</span>
                                 </div>
                                 <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500/80 shadow-[0_0_12px_#10b981]" style={{ width: `${(data.vol_within / data.vol_total) * 100}%` }}></div>
+                                    <div className="h-full bg-emerald-500/80 shadow-[0_0_12px_#10b981]" style={{ width: `${data.vol_total > 0 ? (data.vol_within / data.vol_total) * 100 : 0}%` }}></div>
                                 </div>
                             </div>
                             <div className="space-y-1.5">
                                 <div className="flex justify-between text-[10px] font-bold uppercase">
                                     <span className="text-orange-500">Fora da Meta (&gt; 40h)</span>
-                                    <span className="text-white">{data.vol_above} ({((data.vol_above / data.vol_total) * 100).toFixed(0)}%)</span>
+                                    <span className="text-white">{data.vol_above || 0} ({data.vol_total > 0 ? ((data.vol_above / data.vol_total) * 100).toFixed(0) : 0}%)</span>
                                 </div>
                                 <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                                    <div className="h-full bg-orange-500/80 shadow-[0_0_12px_#f97316]" style={{ width: `${(data.vol_above / data.vol_total) * 100}%` }}></div>
+                                    <div className="h-full bg-orange-500/80 shadow-[0_0_12px_#f97316]" style={{ width: `${data.vol_total > 0 ? (data.vol_above / data.vol_total) * 100 : 0}%` }}></div>
                                 </div>
                             </div>
                         </div>
@@ -574,20 +574,20 @@ export default function HistoricalImpactModal({
                                                     </div>
                                                     
                                                     {/* TRI-LEVEL PROGRESS BAR */}
-                                                    <div className="h-2 bg-white/5 rounded-full overflow-hidden flex flex-col">
-                                                         <div 
-                                                             className="h-[33%] bg-rose-500/40 transition-all border-b border-black/20" 
-                                                             style={{ width: `${Math.max(5, (stage.others / (stage.real || 1)) * 100)}%` }}
-                                                         ></div>
-                                                         <div 
-                                                             className="h-[33%] bg-emerald-500/30 transition-all border-b border-black/20" 
-                                                             style={{ width: `${Math.max(5, (stage.best / (stage.real || 1)) * 100)}%` }}
-                                                         ></div>
-                                                         <div 
-                                                             className="h-[34%] bg-emerald-400/60 group-hover/stage:bg-emerald-400 transition-colors" 
-                                                             style={{ width: `${Math.max(5, (stage.p10 / (stage.real || 1)) * 100)}%` }}
-                                                         ></div>
-                                                     </div>
+                                                     <div className="h-2 bg-white/5 rounded-full overflow-hidden flex flex-col">
+                                                          <div 
+                                                              className="h-[33%] bg-rose-500/40 transition-all border-b border-black/20" 
+                                                              style={{ width: `${Math.max(5, ((stage.others || 0) / (stage.real || 1)) * 100)}%` }}
+                                                          ></div>
+                                                          <div 
+                                                              className="h-[33%] bg-emerald-500/30 transition-all border-b border-black/20" 
+                                                              style={{ width: `${Math.max(5, ((stage.best || 0) / (stage.real || 1)) * 100)}%` }}
+                                                          ></div>
+                                                          <div 
+                                                              className="h-[34%] bg-emerald-400/60 group-hover/stage:bg-emerald-400 transition-colors" 
+                                                              style={{ width: `${Math.max(5, ((stage.p10 || 0) / (stage.real || 1)) * 100)}%` }}
+                                                          ></div>
+                                                      </div>
                                                 </div>
                                             );
                                         })}
