@@ -8,7 +8,7 @@ import {
   AlertCircle, Clock,
   Activity, CalendarDays, CalendarClock, TrendingUp,
   X, ChevronRight, Loader2, CheckCircle, Search, Calendar,
-  User, Shield, LogOut, Settings
+  User, Shield, LogOut, Settings, Menu, Map
 } from 'lucide-react';
 import { CicloTotalHourlyChart } from '@/components/CicloTotalHourlyChart';
 import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
@@ -99,6 +99,7 @@ function DashboardContent() {
   // Bucket Details Drawer State
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false);
   const [selectedHourForAnalysis, setSelectedHourForAnalysis] = useState<number | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeBucketDetails, setActiveBucketDetails] = useState<DrillDownItem[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailSearch, setDetailSearch] = useState('');
@@ -304,12 +305,79 @@ function DashboardContent() {
 
   if (mounted && isMobile) {
     return (
-      <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] min-h-screen font-sans animate-in fade-in duration-500">
+      <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] min-h-screen font-sans animate-in fade-in duration-500 overflow-x-hidden">
+        {/* MOBILE SIDE BAR */}
+        {isMenuOpen && (
+            <div className="fixed inset-0 z-[100] flex">
+                <div 
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" 
+                    onClick={() => setIsMenuOpen(false)}
+                />
+                <div className="relative w-72 bg-[#0a0a0a] border-r border-gray-800 h-full shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col pt-12">
+                    <button 
+                        onClick={() => setIsMenuOpen(false)}
+                        className="absolute top-4 right-4 text-gray-400 p-2"
+                    >
+                        <X className="w-6 h-6" />
+                    </button>
+
+                    <div className="px-6 mb-8">
+                        <h2 className="text-xl font-black text-white tracking-tighter">CCO - RUMO</h2>
+                        <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Menu de Navegação</span>
+                    </div>
+
+                    <div className="flex-1 px-4 space-y-2">
+                        <Link 
+                            href="/origens" 
+                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors group"
+                            onClick={() => setIsMenuOpen(false)}
+                        >
+                            <Map className="w-5 h-5 text-emerald-500" />
+                            <span className="font-bold">Mapa de Origens</span>
+                        </Link>
+
+                        <Link 
+                            href={`/historico?terminal=${terminal}`}
+                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            onClick={() => setIsMenuOpen(false)}
+                        >
+                            <CalendarDays className="w-5 h-5 text-blue-500" />
+                            <span className="font-bold">Histórico</span>
+                        </Link>
+
+                        <Link 
+                            href="/admin/users" 
+                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            onClick={() => setIsMenuOpen(false)}
+                        >
+                            <Settings className="w-5 h-5 text-purple-500" />
+                            <span className="font-bold">Gestão de Usuários</span>
+                        </Link>
+                    </div>
+
+                    <div className="p-4 border-t border-gray-800">
+                        <button 
+                            onClick={handleLogout}
+                            className="flex items-center gap-3 w-full p-4 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors font-bold"
+                        >
+                            <LogOut className="w-5 h-5" />
+                            <span>Encerrar Sessão</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+
         {/* MOBILE HEADER */}
         <header className="flex flex-col mb-2 gap-3">
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#32a3dd]" />
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setIsMenuOpen(true)}
+                className="p-2 bg-gray-900 border border-gray-800 rounded-xl text-white active:scale-95 transition-all"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
               <h1 className="text-xl font-black text-white tracking-tighter">CCO - RUMO</h1>
             </div>
             <div className="flex items-center gap-3">
@@ -323,8 +391,13 @@ function DashboardContent() {
                 >
                     <Activity className={clsx("w-5 h-5", loading && "animate-spin")} />
                 </button>
-                <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
-                    <User className="w-4 h-4 text-blue-400" />
+                <div className="flex items-center gap-2 pl-2 border-l border-gray-800">
+                    <span className="text-[10px] font-black text-white/60 uppercase truncate max-w-[60px]">
+                        {session?.name?.split(' ')[0] || 'User'}
+                    </span>
+                    <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                        <User className="w-4 h-4 text-blue-400" />
+                    </div>
                 </div>
             </div>
           </div>
@@ -473,19 +546,11 @@ function DashboardContent() {
           </p>
         </div>
 
-        {/* BOTTOM NAV */}
-        <footer className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-gray-800 p-2 px-6 flex justify-between items-center z-50">
-           <button onClick={() => window.location.reload()} className="flex flex-col items-center gap-1">
+        {/* BOTTOM NAV - SIMPLIFIED */}
+        <footer className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-gray-800 p-2 px-6 flex justify-center items-center z-50">
+           <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex flex-col items-center gap-1">
               <Activity className="w-5 h-5 text-blue-500" />
-              <span className="text-[8px] font-black uppercase text-blue-500">Dash</span>
-           </button>
-           <Link href="/historico" className="flex flex-col items-center gap-1 text-gray-500">
-              <Calendar className="w-5 h-5" />
-              <span className="text-[8px] font-black uppercase">Histórico</span>
-           </Link>
-           <button onClick={handleLogout} className="flex flex-col items-center gap-1 text-gray-500">
-              <LogOut className="w-5 h-5" />
-              <span className="text-[8px] font-black uppercase">Sair</span>
+              <span className="text-[8px] font-black uppercase text-blue-500">Dashboard</span>
            </button>
         </footer>
 
