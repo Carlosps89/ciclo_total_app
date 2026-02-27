@@ -85,7 +85,7 @@ export default function CicloHourlyDiagnosticsDrawer({ open, onClose, hour, term
         return () => { active = false; };
     }, [open, hour, terminal, date, produto, praca]);
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
         if (!data?.vehicles || data.vehicles.length === 0) return;
 
         const reportData = data.vehicles.map(v => ({

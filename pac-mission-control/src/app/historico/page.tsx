@@ -64,6 +64,7 @@ function HistoricalContent() {
     try {
         // Dynamic import for xlsx to avoid heavy/unsafe top-level import
         const xlsx = await import('xlsx');
+        const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
         const pracaParam = selectedPraca ? `&praca=${encodeURIComponent(selectedPraca)}` : '';
         const res = await fetch(`/api/pac/historico/export?terminal=${terminal}&startDate=${startDate}&endDate=${endDate}${prodParam}${pracaParam}`);
         
