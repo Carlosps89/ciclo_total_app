@@ -57,6 +57,8 @@ function DashboardContent() {
   const [session, setSession] = useState<any>(null);
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [mounted, setMounted] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [refreshCounter, setRefreshCounter] = useState<number>(0);
 
   // Responsive Check & Mounting
   useEffect(() => {
@@ -133,8 +135,11 @@ function DashboardContent() {
     fetchBucketDetails(bucketData.bucket);
   };
     
-  const fetchData = useCallback(async (): Promise<void> => {
+  const fetchData = useCallback(async (isBackground = false): Promise<void> => {
     try {
+      if (!isBackground) setLoading(true);
+      else setIsRefreshing(true);
+
       setError(null);
       const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
       const pracaParam = selectedPraca ? `&praca=${encodeURIComponent(selectedPraca)}` : '';
@@ -171,10 +176,12 @@ function DashboardContent() {
       setAnticipation(await resAnt.json());
       setPracaStats(await resPraca.json());
       setLastFetch(new Date().toLocaleTimeString());
+      setRefreshCounter(prev => prev + 1);
     } catch (e) {
       console.error("Fetch error", e);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, [terminal, selectedProduto, selectedPraca]);
 
@@ -240,7 +247,7 @@ function DashboardContent() {
     const timer = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          fetchData();
+          fetchData(true);
           return 60;
         }
         return prev - 1;
@@ -854,7 +861,12 @@ function DashboardContent() {
           </div>
 
           {/* 2. CICLO TOTAL POR HORA (D) */}
-          <CicloTotalHourlyChart terminal={terminal} produto={selectedProduto} praca={selectedPraca} />
+          <CicloTotalHourlyChart 
+            terminal={terminal} 
+            produto={selectedProduto} 
+            praca={selectedPraca} 
+            refreshKey={refreshCounter}
+          />
 
           {/* 3. JANELAS CHART (Cheguei por Horário de Janela) - REPLACES 3 STAGE CARDS */}
           {anticipation?.window_bars && (

@@ -21,14 +21,14 @@ interface CondensedHourlyItem {
   vol: number;
 }
 
-export function CicloTotalHourlyChart({ terminal, produto, praca }: { terminal: string, produto?: string, praca?: string }) {
+export function CicloTotalHourlyChart({ terminal, produto, praca, refreshKey }: { terminal: string, produto?: string, praca?: string, refreshKey?: number }) {
   registerCharts();
   const [data, setData] = useState<CondensedHourlyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
         const prodParam = produto ? `&produto=${encodeURIComponent(produto)}` : '';
         const pracaParam = praca ? `&praca=${encodeURIComponent(praca)}` : '';
@@ -49,9 +49,9 @@ export function CicloTotalHourlyChart({ terminal, produto, praca }: { terminal: 
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(data.length > 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [terminal, produto, praca]);
+  }, [terminal, produto, praca, refreshKey]);
 
 
   const chartData = {

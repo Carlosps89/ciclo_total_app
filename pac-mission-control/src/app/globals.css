@@ -14,10 +14,12 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-body {
+html, body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  overscroll-behavior: none;
+  overflow-x: hidden;
 }
 
 /* Aplicar mono apenas em números/indicadores quando necessário */
