@@ -573,34 +573,105 @@ function DashboardContent() {
         "min-h-screen bg-[#050505] text-gray-200 p-4 font-sans selection:bg-blue-500/30 overflow-hidden flex flex-col gap-4 max-w-[100vw] overflow-x-hidden",
         isTvMode ? "h-screen" : "h-auto"
       )}>
+      {/* WEB SIDE BAR (Shared Logic) */}
+      {isMenuOpen && (
+          <div className="fixed inset-0 z-[100] flex">
+              <div 
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in" 
+                  onClick={() => setIsMenuOpen(false)}
+              />
+              <div className="relative w-72 bg-[#0a0a0a] border-r border-gray-800 h-full shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col pt-12">
+                  <button 
+                      onClick={() => setIsMenuOpen(false)}
+                      className="absolute top-4 right-4 text-gray-400 p-2"
+                  >
+                      <X className="w-6 h-6" />
+                  </button>
+
+                  <div className="px-6 mb-8">
+                      <h2 className="text-xl font-black text-white tracking-tighter">CCO - RUMO</h2>
+                      <span className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">Menu de Navegação</span>
+                  </div>
+
+                  <div className="flex-1 px-4 space-y-2">
+                      <Link 
+                          href="/origens" 
+                          className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors group"
+                          onClick={() => setIsMenuOpen(false)}
+                      >
+                          <Map className="w-5 h-5 text-emerald-500" />
+                          <span className="font-bold">Mapa de Origens</span>
+                      </Link>
+
+                      <Link 
+                          href={`/forecast?terminal=${terminal}`}
+                          className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                          onClick={() => setIsMenuOpen(false)}
+                      >
+                          <TrendingUp className="w-5 h-5 text-yellow-500" />
+                          <span className="font-bold">Projeção de Fila</span>
+                      </Link>
+
+                      <Link 
+                          href={`/historico?terminal=${terminal}`}
+                          className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                          onClick={() => setIsMenuOpen(false)}
+                      >
+                          <CalendarDays className="w-5 h-5 text-blue-500" />
+                          <span className="font-bold">Análise Histórica</span>
+                      </Link>
+
+                      {session?.role === 'ADM' && (
+                        <Link 
+                            href="/admin/users" 
+                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            onClick={() => setIsMenuOpen(false)}
+                        >
+                            <Settings className="w-5 h-5 text-purple-500" />
+                            <span className="font-bold">Gestão de Usuários</span>
+                        </Link>
+                      )}
+                  </div>
+
+                  <div className="p-4 border-t border-gray-800">
+                      <button 
+                          onClick={handleLogout}
+                          className="flex items-center gap-3 w-full p-4 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors font-bold"
+                      >
+                          <LogOut className="w-5 h-5" />
+                          <span>Encerrar Sessão</span>
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* HEADER */}
       <header className="flex justify-between items-center border-b border-gray-800 pb-2 shrink-0">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-white uppercase flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-[#32a3dd] animate-pulse shadow-[0_0_10px_#32a3dd]" />
-            CCO - RUMO - CENTRO DE CONTROLE RODOVIÁRIO
-          </h1>
-          <p className="text-white/90 text-xs mt-1 uppercase tracking-widest font-sans">
-            Monitoramento em Tempo Real • Terminal {terminal}
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-             {session?.role !== 'OPERACAO' && (
-                <>
-                  <Link href={`/forecast?terminal=${terminal}`} className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] font-bold text-blue-300 uppercase tracking-wider transition">
-                      <TrendingUp className="w-3 h-3" />
-                      Projeção de Fila
-                  </Link>
-                  <Link href={`/historico?terminal=${terminal}`} className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] font-bold text-emerald-300 uppercase tracking-wider transition">
-                      <Calendar className="w-3 h-3" />
-                      Análise Histórica
-                  </Link>
-                </>
-             )}
+        <div className="flex items-center gap-6">
+          <button 
+            onClick={() => setIsMenuOpen(true)}
+            className="p-2 bg-gray-800 border border-gray-700 rounded-xl text-white hover:bg-gray-700 transition-all active:scale-95"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black tracking-tight text-white uppercase flex items-center gap-3 leading-none">
+              CCO - RUMO - CCR
+            </h1>
+            <p className="text-white/60 text-[10px] mt-1 uppercase tracking-[0.2em] font-black">
+              Monitoramento Tempo Real • Terminal {terminal}
+            </p>
+          </div>
+          
+          <div className="h-10 w-px bg-gray-800 opacity-50" />
+
+          <div className="flex items-center gap-3">
              <select 
                 value={selectedProduto} 
                 onChange={e => setSelectedProduto(e.target.value)}
-                className="bg-gray-800 border-gray-700 text-white rounded text-[10px] uppercase font-bold px-2 py-1 cursor-pointer outline-none hover:bg-gray-700 transition"
-                title="Produto"
+                className="bg-gray-900 border border-gray-800 text-white rounded-lg text-[11px] uppercase font-black px-3 py-1.5 cursor-pointer outline-none hover:bg-gray-800 transition shadow-inner"
+                title="Filtrar por Produto"
              >
                 <option value="">TODOS OS PRODUTOS</option>
                 {availableProdutos.map(p => <option key={p} value={p}>{p}</option>)}
@@ -608,15 +679,16 @@ function DashboardContent() {
              <select 
                 value={selectedPraca} 
                 onChange={e => setSelectedPraca(e.target.value)}
-                className="bg-gray-800 border-gray-700 text-white rounded text-[10px] uppercase font-bold px-2 py-1 cursor-pointer outline-none hover:bg-gray-700 transition"
-                title="Praça"
+                className="bg-gray-900 border border-gray-800 text-white rounded-lg text-[11px] uppercase font-black px-3 py-1.5 cursor-pointer outline-none hover:bg-gray-800 transition shadow-inner"
+                title="Filtrar por Praça"
              >
                 {availablePracas.map(p => <option key={p} value={p}>{p}</option>)}
              </select>
           </div>
         </div>
+
         <div className="text-right flex items-center gap-6">
-          {/* USER PROFILE & LOGOUT */}
+          {/* USER PROFILE */}
           <div className="flex items-center gap-3 bg-gray-900/50 border border-gray-800 rounded-2xl px-4 py-2">
             <div className="flex flex-col items-end">
               <span className="text-[10px] font-black text-white uppercase tracking-wider leading-none">{session?.name || 'Usuário'}</span>
@@ -624,22 +696,8 @@ function DashboardContent() {
                 {session?.role || '...'}
               </span>
             </div>
-            <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
+            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
               {session?.role === 'ADM' ? <Shield className="w-4 h-4 text-purple-400" /> : <User className="w-4 h-4 text-blue-400" />}
-            </div>
-            <div className="flex items-center gap-1 border-l border-gray-800 pl-3 ml-1">
-              {session?.role === 'ADM' && (
-                <Link href="/admin/users" title="Gestão de Usuários" className="p-1.5 hover:bg-gray-800 rounded transition text-gray-400 hover:text-white">
-                  <Settings className="w-4 h-4" />
-                </Link>
-              )}
-              <button 
-                onClick={handleLogout}
-                title="Sair do Sistema"
-                className="p-1.5 hover:bg-red-500/10 rounded transition text-gray-400 hover:text-red-500"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
