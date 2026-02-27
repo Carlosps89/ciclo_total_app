@@ -81,8 +81,11 @@ export function HistoricalTrendChart({
   }, [fetchData]);
 
   const chartData = {
-    labels: data.map(d => {
-        const [, m, day] = d.day.split('-');
+    labels: (data || []).map(d => {
+        if (!d?.day) return '';
+        const parts = d.day.split('-');
+        if (parts.length < 3) return d.day;
+        const [, m, day] = parts;
         return `${day}/${m}`;
     }),
     datasets: [

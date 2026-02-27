@@ -27,7 +27,7 @@ function HeatmapTooltip({ x, y, content }: { x: number, y: number, content: Reac
 
   return createPortal(
     <div
-      className="fixed z-[9999] pointer-events-none"
+      className="fixed z-9999 pointer-events-none"
       style={{
         left: x + TOOLTIP_OFFSET,
         top: y + TOOLTIP_OFFSET,
@@ -62,9 +62,9 @@ export function HistoricalHeatmap({
         const res = await fetch(`/api/pac/historico/heatmap?terminal=${terminal}&startDate=${startDate}&endDate=${endDate}${prodParam}${pracaParam}`);
         if(res.ok) {
             const json = await res.json();
-            const rawData: HeatmapItem[] = json.data || [];
+            const rawData: HeatmapItem[] = Array.isArray(json.data) ? json.data : [];
             
-            const uniqueDays = Array.from(new Set(rawData.map(item => item.day))).sort();
+            const uniqueDays = Array.from(new Set(rawData.map(item => item?.day))).filter(Boolean).sort() as string[];
             const m: (HeatmapItem | null)[][] = Array.from({ length: 24 }, () => 
               Array.from({ length: uniqueDays.length }, () => null)
             );
@@ -91,7 +91,8 @@ export function HistoricalHeatmap({
   }, [fetchData]);
 
   const handleMouseEnter = (e: React.MouseEvent, item: HeatmapItem) => {
-      const [, m, d] = item.day.split('-');
+      const parts = (item?.day || '').split('-');
+      const [, m, d] = parts.length >= 3 ? parts : ['', '', item.day];
       setTooltip({
           x: e.clientX,
           y: e.clientY,
@@ -170,7 +171,8 @@ export function HistoricalHeatmap({
                 <div className="w-12 shrink-0"></div>
                 <div className="flex-1 flex gap-[2px]">
                     {days.map((day) => {
-                      const [, , d] = day.split('-');
+                      const parts = day.split('-');
+                      const d = parts.length >= 3 ? parts[2] : day;
                       return (
                         <div key={day} className="flex-1 text-[10px] text-white/70 text-center font-bold font-mono uppercase tracking-tighter">
                           {d}

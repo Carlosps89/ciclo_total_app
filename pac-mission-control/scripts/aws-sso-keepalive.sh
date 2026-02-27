@@ -2,7 +2,8 @@
 
 # Configurações
 PROFILE="rumo-sso"
-DIR="/Users/carlospereira/ciclo_total_app/pac-mission-control"
+# Detecta o diretório raiz do projeto (um nível acima de scripts/)
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 LOG_FILE="$DIR/scripts/aws-auth.log"
 
 # Garante que o diretório de execução está correto
