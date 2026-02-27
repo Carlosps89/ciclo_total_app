@@ -63,12 +63,10 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
     const atingimento = real > 0 ? (meta / real) * 100 : 0;
     
     // Scale for speedometer (0 to 180 degrees)
-    // 0h is 100% (green), 80h is 0% (red)? 
-    // Let's say: Meta 40h is center (90deg). 20h is 0deg (Left/Green). 60h is 180deg (Right/Red).
     const needleRotation = Math.min(Math.max(((real - 20) / 40) * 180, 0), 180);
 
     return (
-        <div className="fixed inset-0 z-[110] flex justify-end">
+        <div className="fixed inset-0 z-110 flex justify-end">
             <div 
                 className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in" 
                 onClick={onClose}
@@ -90,7 +88,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                 </header>
 
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                    {loading ? (
+                    {loading || !data || !summary ? (
                         <div className="h-full flex flex-col items-center justify-center py-20">
                             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
                             <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Processando Athena Data...</p>
@@ -166,12 +164,12 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                         <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Volume Mensal (Qtd)</p>
                                         <div className="flex items-center justify-end gap-3">
                                             <div>
-                                                <div className="text-sm font-black text-green-500 leading-none">{summary?.target_volume}</div>
+                                                <div className="text-sm font-black text-green-500 leading-none">{summary.target_volume}</div>
                                                 <div className="text-[7px] font-black text-gray-500 uppercase">Abaixo 40h</div>
                                             </div>
                                             <div className="h-6 w-px bg-gray-800" />
                                             <div>
-                                                <div className="text-sm font-black text-red-500 leading-none">{(summary?.total_volume || 0) - (summary?.target_volume || 0)}</div>
+                                                <div className="text-sm font-black text-red-500 leading-none">{summary.total_volume - summary.target_volume}</div>
                                                 <div className="text-[7px] font-black text-gray-500 uppercase">Acima 40h</div>
                                             </div>
                                         </div>
@@ -189,7 +187,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                     <span className="text-[9px] text-gray-500 font-bold uppercase italic">Real vs Best Case</span>
                                 </div>
                                 <div className="space-y-4">
-                                    {data?.pracas.map((p, i) => {
+                                    {data.pracas?.map((p, i) => {
                                         const pGap = Math.max(0, p.avg_h - p.best_case);
                                         return (
                                             <div key={i} className="bg-gray-900/20 border border-gray-800 rounded-2xl p-4 hover:border-blue-500/30 transition-all group overflow-hidden relative">
