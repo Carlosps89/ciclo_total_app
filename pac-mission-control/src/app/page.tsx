@@ -62,7 +62,14 @@ function DashboardContent() {
   // Fetch Session
   useEffect(() => {
     fetch('/api/auth/session').then(res => {
-      if (res.ok) res.json().then(data => setSession(data.user));
+      if (res.ok) {
+        res.json().then(data => setSession(data.user));
+      } else {
+        // Se a API diz que não está autenticado, força o login
+        window.location.href = '/login';
+      }
+    }).catch(() => {
+        window.location.href = '/login';
     });
   }, []);
 
