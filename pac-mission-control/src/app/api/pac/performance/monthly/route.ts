@@ -67,7 +67,7 @@ export async function GET(request: Request): Promise<NextResponse> {
                     -- Stages averages
                     avg(c.aguardando_agendamento_h) as avg_agend,
                     avg(c.tempo_viagem_h) as avg_viagem,
-                    avg(case when c.is_area_verde = 'Sim' then c.tempo_interno_h end) as avg_verde,
+                    avg(c.area_verde_cheguei_h) as avg_verde,
                     avg(c.tempo_interno_h) as avg_interno,
                     avg(case when c.is_antecipado = 1 then c.ciclo_total_h end) as avg_antecip
 
