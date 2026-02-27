@@ -138,8 +138,8 @@ export default function HistoricalImpactModal({
   const gaugeChartData = useMemo(() => {
     if (!data) return null;
     
-    const fill = data.attainment;
-    const remaining = 100 - fill;
+    const fill = data.attainment || 0;
+    const remaining = Math.max(0, 100 - fill);
 
     let color = '#10b981'; // Default emerald
     if (fill < 85) color = '#f97316'; // Orange
@@ -283,9 +283,9 @@ export default function HistoricalImpactModal({
                             <div className="flex items-baseline gap-2">
                                 <span className={clsx(
                                     "text-7xl font-black tracking-tighter",
-                                    data.real_avg > 40 ? "text-orange-500" : "text-emerald-500"
+                                    (data.real_avg || 0) > 40 ? "text-orange-500" : "text-emerald-500"
                                 )}>
-                                    {(data.real_avg - 40).toFixed(1)}h
+                                    {((data.real_avg || 0) - 40).toFixed(1)}h
                                 </span>
                             </div>
                         </div>

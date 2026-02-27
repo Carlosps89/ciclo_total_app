@@ -411,9 +411,13 @@ function HistoricalContent() {
 }
 
 function daysBetween(start: string, end: string): number {
-    const s = new Date(start);
-    const e = new Date(end);
-    return Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    if (!start || !end) return 0;
+    try {
+        const s = new Date(start);
+        const e = new Date(end);
+        if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+        return Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    } catch { return 0; }
 }
 
 export default function HistoricalPage() {

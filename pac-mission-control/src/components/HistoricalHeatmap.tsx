@@ -70,8 +70,9 @@ export function HistoricalHeatmap({
             );
             
             rawData.forEach(item => {
+              if (!item) return;
               const dayIdx = uniqueDays.indexOf(item.day);
-              if (dayIdx !== -1) {
+              if (dayIdx !== -1 && item.hour >= 0 && item.hour < 24) {
                 m[item.hour][dayIdx] = item;
               }
             });
