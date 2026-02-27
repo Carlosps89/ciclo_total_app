@@ -83,10 +83,12 @@ export function HistoricalTrendChart({
   const chartData = {
     labels: (data || []).map(d => {
         if (!d?.day) return '';
-        const parts = d.day.split('-');
-        if (parts.length < 3) return d.day;
-        const [, m, day] = parts;
-        return `${day}/${m}`;
+        try {
+            const parts = d.day.split('-');
+            if (parts.length < 3) return d.day;
+            const [, m, day] = parts;
+            return `${day}/${m}`;
+        } catch { return d.day || ''; }
     }),
     datasets: [
       {
@@ -107,7 +109,12 @@ export function HistoricalTrendChart({
           anchor: 'end' as const,
           color: '#10b981',
           font: { weight: 'bold' as const, size: 10 },
-          formatter: (value: number) => `${value.toFixed(1)}h`,
+          formatter: (value: number) => {
+            if (value === null || value === undefined) return '';
+            try {
+              return `${Number(value).toFixed(1)}h`;
+            } catch { return `${value}h`; }
+          },
           padding: 4,
           offset: 2
         }

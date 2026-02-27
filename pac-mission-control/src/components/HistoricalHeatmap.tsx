@@ -104,7 +104,9 @@ export function HistoricalHeatmap({
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-white/60">Média:</span>
-                    <span className="font-mono text-white font-bold">{item.ciclo_medio.toFixed(1)}h</span>
+                    <span className="font-mono text-white font-bold">
+                        {typeof item.ciclo_medio === 'number' ? item.ciclo_medio.toFixed(1) : item.ciclo_medio}h
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-white/60">Volume:</span>
@@ -171,8 +173,11 @@ export function HistoricalHeatmap({
                 <div className="w-12 shrink-0"></div>
                 <div className="flex-1 flex gap-[2px]">
                     {days.map((day) => {
-                      const parts = day.split('-');
-                      const d = parts.length >= 3 ? parts[2] : day;
+                      let d = day;
+                      try {
+                        const parts = day.split('-');
+                        d = parts.length >= 3 ? parts[2] : day;
+                      } catch { d = day; }
                       return (
                         <div key={day} className="flex-1 text-[10px] text-white/70 text-center font-bold font-mono uppercase tracking-tighter">
                           {d}

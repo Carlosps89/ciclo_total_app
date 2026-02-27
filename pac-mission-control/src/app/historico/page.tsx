@@ -48,6 +48,11 @@ function HistoricalContent() {
   const [exportLoading, setExportLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(60);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleExport = async () => {
     setExportLoading(true);
@@ -164,6 +169,12 @@ function HistoricalContent() {
     };
     fetchMeta();
   }, [terminal]);
+
+  if (!mounted) return (
+    <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500/20" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#050505] text-gray-200 p-6 font-sans flex flex-col gap-6">
