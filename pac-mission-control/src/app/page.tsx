@@ -304,18 +304,39 @@ function DashboardContent() {
     return (
       <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] min-h-screen font-sans animate-in fade-in duration-500">
         {/* MOBILE HEADER */}
-        <header className="flex justify-between items-center mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#32a3dd]" />
-            <h1 className="text-xl font-black text-white tracking-tighter">CCO - RUMO</h1>
+        <header className="flex flex-col mb-2 gap-3">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#32a3dd]" />
+              <h1 className="text-xl font-black text-white tracking-tighter">CCO - RUMO</h1>
+            </div>
+            <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => { fetchData(); fetchOnlyOutliers(); }} 
+                  className={clsx(
+                    "p-2 bg-gray-900 border border-gray-800 rounded-full transition-all active:scale-90", 
+                    loading ? "text-blue-500" : "text-gray-400"
+                  )}
+                  title="Atualizar Dados"
+                >
+                    <Activity className={clsx("w-5 h-5", loading && "animate-spin")} />
+                </button>
+                <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
+                    <User className="w-4 h-4 text-blue-400" />
+                </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
-              <button onClick={() => fetchData()} className="p-1 text-gray-400">
-                  <Activity className={clsx("w-5 h-5", loading && "animate-spin text-blue-500")} />
-              </button>
-              <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
-                  <User className="w-4 h-4 text-blue-400" />
-              </div>
+
+          {/* DISCRETE META DATA */}
+          <div className="flex justify-between items-center px-1 border-y border-gray-800/50 py-2">
+             <div className="flex flex-col">
+                <span className="text-[8px] uppercase font-bold text-gray-500 tracking-wider">Última Saída (AWS)</span>
+                <span className="text-[10px] text-blue-300 font-mono">{fmtDate(summary?.meta?.aws_last_peso_saida_brt)}</span>
+             </div>
+             <div className="flex flex-col items-end">
+                <span className="text-[8px] uppercase font-bold text-gray-500 tracking-wider text-right">Último Cheguei (AWS)</span>
+                <span className="text-[10px] text-blue-300 font-mono text-right">{fmtDate(summary?.meta?.aws_last_cheguei_brt)}</span>
+             </div>
           </div>
         </header>
 
@@ -346,13 +367,19 @@ function DashboardContent() {
 
         {/* SUPPORT GRID: CICLO HORA + CICLO MES */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col">
-             <span className="text-[10px] uppercase font-bold text-gray-400 mb-2">Ciclo Última Hora</span>
+          <Link 
+            href={`/historico?terminal=${terminal}`}
+            className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col hover:bg-gray-800/60 active:scale-95 transition-all group"
+          >
+             <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] uppercase font-bold text-gray-400">Ciclo Última Hora</span>
+                <ChevronRight className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+             </div>
              <div className="flex items-center justify-between">
                 <span className="text-2xl font-black text-white">{fmtH(ciclo?.ciclo_total?.hora_atual?.avg_h)}h</span>
                 <Activity className="w-4 h-4 text-blue-500 opacity-50" />
              </div>
-          </div>
+          </Link>
           <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col">
              <span className="text-[10px] uppercase font-bold text-gray-400 mb-2">Ciclo Médio Mês</span>
              <div className="flex items-center justify-between">
