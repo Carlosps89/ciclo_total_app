@@ -1,0 +1,17 @@
+{
+  "name": "CCO - RUMO",
+  "short_name": "CCO - RUMO",
+  "description": "Centro de Controle Rodoviário - Rumo Logística",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#010b1a",
+  "theme_color": "#010b1a",
+  "icons": [
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

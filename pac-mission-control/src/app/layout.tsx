@@ -17,8 +17,16 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PAC Mission Control",
+  title: "CCO - RUMO",
   description: "Centro de Controle Rodoviário - Ciclo Total",
+  manifest: "/manifest.json",
+  themeColor: "#010b1a",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "CCO - RUMO",
+  },
 };
 
 export default function RootLayout({

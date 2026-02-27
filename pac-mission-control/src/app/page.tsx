@@ -58,6 +58,15 @@ function DashboardContent() {
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(60);
   const [session, setSession] = useState<any>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  // Responsive Check
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Fetch Session
   useEffect(() => {
@@ -290,6 +299,139 @@ function DashboardContent() {
     } catch { return iso; }
   };
 
+  const MobileDashboard = () => (
+    <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] min-h-screen font-sans animate-in fade-in duration-500">
+      {/* MOBILE HEADER */}
+      <header className="flex justify-between items-center mb-2">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_8px_#32a3dd]" />
+          <h1 className="text-xl font-black text-white tracking-tighter">CCO - RUMO</h1>
+        </div>
+        <div className="flex items-center gap-3">
+            <button onClick={() => fetchData()} className="p-1 text-gray-400">
+                <Activity className={clsx("w-5 h-5", loading && "animate-spin text-blue-500")} />
+            </button>
+            <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
+                <User className="w-4 h-4 text-blue-400" />
+            </div>
+        </div>
+      </header>
+
+      {/* HERO CARD: CICLO DIA + VOL DIA */}
+      <div className="bg-blue-600/20 border border-blue-500/30 rounded-3xl p-6 flex flex-col relative overflow-hidden">
+        <div className="absolute top-4 right-6 opacity-20"><CalendarClock className="w-12 h-12 text-white" /></div>
+        <span className="text-xs uppercase font-bold text-blue-300 tracking-widest mb-1">Ciclo do Dia</span>
+        <div className="flex items-baseline gap-2">
+          <span className="text-5xl font-black text-white tracking-tighter">{fmtH(ciclo?.ciclo_total.dia?.avg_h)}</span>
+          <span className="text-xl font-bold text-white/80">h</span>
+        </div>
+        <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-4">
+          <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-white/60">Volume Hoje</span>
+            <span className="text-lg font-black text-white">{ciclo?.ciclo_total.dia?.volume || 0}</span>
+          </div>
+          <div className="flex flex-col items-end">
+             <span className="text-[10px] uppercase font-bold text-white/60">Status vs Meta</span>
+             <span className={clsx(
+                "text-xs font-bold px-2 py-0.5 rounded",
+                (ciclo?.ciclo_total.dia?.delta_meta_h || 0) > 0 ? "bg-red-500/20 text-red-400" : "bg-green-500/20 text-green-400"
+             )}>
+                Δ {fmtH(ciclo?.ciclo_total.dia?.delta_meta_h)}h
+             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* SUPPORT GRID: VOL HORA + CICLO MES */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col">
+           <span className="text-[10px] uppercase font-bold text-gray-400 mb-2">Vol. Última Hora</span>
+           <div className="flex items-center justify-between">
+              <span className="text-2xl font-black text-white">{ciclo?.ciclo_total.hora_atual?.volume || 0}</span>
+              <Activity className="w-4 h-4 text-blue-500 opacity-50" />
+           </div>
+        </div>
+        <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col">
+           <span className="text-[10px] uppercase font-bold text-gray-400 mb-2">Ciclo Médio Mês</span>
+           <div className="flex items-center justify-between">
+              <span className="text-2xl font-black text-white">{fmtH(ciclo?.ciclo_total.mes?.avg_h)}h</span>
+              <CalendarDays className="w-4 h-4 text-purple-500 opacity-50" />
+           </div>
+        </div>
+      </div>
+
+      {/* PERFORMANCE: % ANTECIPADOS + MEDIA ANT */}
+      <div className="bg-gray-900/40 border border-gray-800 rounded-2xl divide-y divide-gray-800">
+        <div className="p-4 flex items-center justify-between">
+           <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold text-gray-400">Percentual Antecipados</span>
+              <span className="text-xl font-black text-blue-400">{(anticipation?.summary.total_pct || 0).toFixed(1)}%</span>
+           </div>
+           <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+              <TrendingUp className="w-5 h-5" />
+           </div>
+        </div>
+        <div className="p-4 flex items-center justify-between">
+           <div className="flex flex-col">
+              <span className="text-[10px] uppercase font-bold text-gray-400">Média Antecipação (Excesso)</span>
+              <span className="text-xl font-black text-emerald-400">{(anticipation?.summary.avg_positive_h || 0).toFixed(1)}h</span>
+           </div>
+           <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+              <Clock className="w-5 h-5" />
+           </div>
+        </div>
+      </div>
+
+      {/* PLANNING: TODAY VS TOMORROW */}
+      <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col gap-4">
+        <div className="flex justify-between items-center">
+            <span className="text-[10px] uppercase font-bold text-gray-300">Planejamento Antecipação (D vs D+1)</span>
+            <CalendarClock className="w-4 h-4 text-gray-500" />
+        </div>
+        
+        <div className="flex h-32 items-end gap-6 px-4">
+           {/* Hoje */}
+           <div className="flex-1 flex flex-col items-center gap-2">
+              <div className="w-full flex items-end gap-1 h-full">
+                  <div className="flex-1 bg-blue-500/40 rounded-t-lg" style={{ height: '60%' }}></div>
+                  <div className="flex-1 bg-blue-500 rounded-t-lg" style={{ height: '40%' }}></div>
+              </div>
+              <span className="text-[10px] font-bold text-gray-400">HOJE (D)</span>
+           </div>
+           {/* Amanhã */}
+           <div className="flex-1 flex flex-col items-center gap-2">
+              <div className="w-full flex items-end gap-1 h-full">
+                  <div className="flex-1 bg-purple-500/40 rounded-t-lg" style={{ height: '45%' }}></div>
+                  <div className="flex-1 bg-purple-500 rounded-t-lg" style={{ height: '35%' }}></div>
+              </div>
+              <span className="text-[10px] font-bold text-gray-400">AMANHÃ (D+1)</span>
+           </div>
+        </div>
+        <p className="text-[9px] text-gray-500 text-center uppercase tracking-tight italic">
+            Visualização de fluxo de antecipados simplificada
+        </p>
+      </div>
+
+      {/* BOTTOM NAV */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-gray-800 p-2 px-6 flex justify-between items-center z-50">
+         <button onClick={() => window.location.reload()} className="flex flex-col items-center gap-1">
+            <Activity className="w-5 h-5 text-blue-500" />
+            <span className="text-[8px] font-black uppercase text-blue-500">Dash</span>
+         </button>
+         <Link href="/historico" className="flex flex-col items-center gap-1 text-gray-500">
+            <Calendar className="w-5 h-5" />
+            <span className="text-[8px] font-black uppercase">Histórico</span>
+         </Link>
+         <button onClick={handleLogout} className="flex flex-col items-center gap-1 text-gray-500">
+            <LogOut className="w-5 h-5" />
+            <span className="text-[8px] font-black uppercase">Sair</span>
+         </button>
+      </nav>
+    </div>
+  );
+
+  if (isMobile) return <MobileDashboard />;
+
   return (
     <div
       data-testid="dashboard-cco"
@@ -302,7 +444,7 @@ function DashboardContent() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-white uppercase flex items-center gap-3">
             <div className="w-3 h-3 rounded-full bg-[#32a3dd] animate-pulse shadow-[0_0_10px_#32a3dd]" />
-            CENTRO DE CONTROLE RODOVIÁRIO - CICLO TOTAL
+            CCO - RUMO - CENTRO DE CONTROLE RODOVIÁRIO
           </h1>
           <p className="text-white/90 text-xs mt-1 uppercase tracking-widest font-sans">
             Monitoramento em Tempo Real • Terminal {terminal}
