@@ -19,8 +19,6 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       ${map.situacao} as _col_situacao,
       ${map.produto} as _col_produto,
       ${map.cliente} as _col_cliente,
-      ${map.area_verde} as _col_area_verde,
-      ${map.is_antecipado} as _col_is_antecipado,
       ano, mes, dia,
       -- Calculate timestamp of last update for deduplication (Naive cast to timestamp)
       -- Priority: Peso Saida > Chegada > Chamada > Cheguei > Agendamento > Emissao
@@ -71,13 +69,15 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_chamada as timestamp)) / 3600.0 as area_verde_cheguei_h,
       date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp)) / 3600.0 as transito_para_terminal_h,
       
+      -- Calculated Logic for Flags (Safe)
+      CASE WHEN try_cast(_col_cheguei as timestamp) < try_cast(_col_janela as timestamp) THEN 1 ELSE 0 END as is_antecipado,
+      CASE WHEN _col_cheguei IS NOT NULL AND _col_chamada IS NOT NULL THEN 'Sim' ELSE 'Não' END as is_area_verde,
+
       -- Metadata
       _col_evento as evento_descricao,
       _col_situacao as situacao_descricao,
       _col_produto as produto,
       _col_cliente as cliente,
-      _col_area_verde as area_verde,
-      _col_is_antecipado as is_antecipado,
       ts_ult,
       ano, mes, dia
       
@@ -94,15 +94,13 @@ export function getCleanMap(columns: string[]): Record<string, string> {
   return {
     ...rawMap,
     dt_chamada: find(['chamada']) || 'chamada',
-    dt_cheguei: find(['cheguei']) || 'cheguei',
+    dt_cheguei: find(['cheguei', 'chegou']) || 'cheguei',
     dt_janela: find(['janela', 'window']) || 'janela_agendamento',
     placa: find(['placa', 'tracao']) || 'placa_tracao',
     janela_agendamento: find(['janela', 'window']) || 'janela_agendamento',
     evento: find(['evento', 'event', 'desc', 'ds_evento']) || 'evento',
     situacao: find(['situacao', 'status', 'ds_situacao']) || 'situacao',
     produto: find(['produto', 'mercadoria', 'material']) || 'produto',
-    area_verde: find(['area_verde', 'verde', 'green']) || 'area_verde',
-    is_antecipado: find(['antecipado', 'is_antecipado', 'antecipacao']) || 'is_antecipado',
     
     gmo_id: rawMap.id || find(['gmo_id', 'id']) || 'gmo_id',
     placa_cavalo: find(['placa', 'tracao']) || 'placa_tracao',
