@@ -5,32 +5,12 @@ import { X, Target, Loader2, TrendingUp, TrendingDown, Layers, MapPin, Package, 
 import clsx from 'clsx';
 import {
   Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
   type ChartOptions
 } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { registerCharts } from '@/lib/chart-init';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ArcElement,
-  ChartDataLabels
-);
+// Replaced global registration with registerCharts() inside component
 
 interface StageMetric {
     real: number;
@@ -90,6 +70,7 @@ export default function HistoricalImpactModal({
   produto,
   praca,
 }: HistoricalImpactModalProps) {
+  registerCharts();
   const [data, setData] = useState<ImpactDataV4_2 | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedPraca, setExpandedPraca] = useState<string | null>(null);

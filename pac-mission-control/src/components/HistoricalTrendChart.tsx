@@ -2,34 +2,14 @@
 
 import {
   Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions,
-  Filler
+  type ChartOptions
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
-import ChartDataLabels from 'chartjs-plugin-datalabels';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Loader2, TrendingUp } from 'lucide-react';
+import { registerCharts } from '@/lib/chart-init';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ChartDataLabels
-);
+// Initialized via central function inside the component
 
 interface TrendItem {
   day: string;
@@ -56,6 +36,7 @@ export function HistoricalTrendChart({
   produto?: string, 
   praca?: string 
 }) {
+  registerCharts();
   const [data, setData] = useState<TrendItem[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -53,6 +53,11 @@ export function HistoricalHeatmap({
   const [days, setDays] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [tooltip, setTooltip] = useState<{ x: number, y: number, content: ReactNode } | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -153,7 +158,7 @@ export function HistoricalHeatmap({
 
   return (
     <div className="flex flex-col bg-gray-900/20 p-4 rounded-xl border border-gray-800/50 overflow-hidden">
-        {tooltip && <HeatmapTooltip {...tooltip} />}
+        {mounted && tooltip && <HeatmapTooltip {...tooltip} />}
         
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-[10px] uppercase font-bold text-white/90 tracking-widest flex items-center gap-2">
