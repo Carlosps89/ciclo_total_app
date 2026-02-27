@@ -58,22 +58,22 @@ export default function LoginPage() {
           {/* Top highlight bar */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#32a3dd]/50 to-transparent" />
 
-          {/* RUMO LOGO (SVG Placeholder) */}
-          <div className="mb-8 flex flex-col items-center">
-            <div className="w-16 h-16 relative">
-              <svg viewBox="0 0 100 100" className="w-full h-full text-white fill-current">
-                <path d="M50 0C22.4 0 0 22.4 0 50s22.4 50 50 50 50-22.4 50-50S77.6 0 50 0zm0 90c-22.1 0-40-17.9-40-40s17.9-40 40-40 40 17.9 40 40-17.9 40-40 40z" opacity="0.2"/>
-                <path d="M75 50c0 13.8-11.2 25-25 25s-25-11.2-25-25 11.2-25 25-25h5v5h-5c-11 0-20 9-20 20s9 20 20 20 20-9 20-20v-5h5v5z" />
-                <path d="M50 35c-8.3 0-15 6.7-15 15h5c0-5.5 4.5-10 10-10V35z" />
-                <path d="M65 50h-5c0 5.5-4.5 10-10 10v5c8.3 0 15-6.7 15-15z" />
+          {/* RUMO LOGO (SVG Official Reproduction) */}
+          <div className="mb-10 flex flex-col items-center">
+            <div className="flex items-center gap-3">
+              <svg viewBox="0 0 200 60" className="w-48 h-12 text-white fill-current">
+                {/* Stylized Rumo Icon (Swirl/R) */}
+                <path d="M30 0C13.4 0 0 13.4 0 30s13.4 30 30 30h10V50h-10c-11 0-20-9-20-20s9-20 20-20h10v-5c0-2.8 2.2-5 5-5h5V0h-20z" opacity="0.9"/>
+                <path d="M35 15c-8.3 0-15 6.7-15 15h5c0-5.5 4.5-10 10-10V15z" />
+                <path d="M50 30c0 8.3-6.7 15-15 15v5c11 0 20-9 20-20s-9-20-20-20v5c5.5 0 10 4.5 10 10z" />
+                
+                {/* Text: rumo (Approximated official bold lowercase) */}
+                <text x="65" y="42" style={{ font: 'bold 42px sans-serif', letterSpacing: '-2px' }}>rumo</text>
               </svg>
             </div>
-            <h1 className="text-xl font-black text-white mt-4 tracking-[3px] uppercase">
+            <h1 className="text-xl font-black text-white mt-6 tracking-[3px] uppercase text-center leading-tight">
               Centro de Controle Rodoviário
             </h1>
-            <p className="text-[#32a3dd] text-[10px] font-bold tracking-[2px] uppercase mt-2 opacity-80">
-              PAC Mission Control
-            </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/request';
-import { decrypt } from './lib/auth';
+import { decrypt } from './src/lib/auth';
 
 // Proteção de rotas
 export async function middleware(request: NextRequest) {
