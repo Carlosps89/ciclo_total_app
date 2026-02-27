@@ -19,6 +19,8 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       ${map.situacao} as _col_situacao,
       ${map.produto} as _col_produto,
       ${map.cliente} as _col_cliente,
+      ${map.area_verde} as _col_area_verde,
+      ${map.is_antecipado} as _col_is_antecipado,
       ano, mes, dia,
       -- Calculate timestamp of last update for deduplication (Naive cast to timestamp)
       -- Priority: Peso Saida > Chegada > Chamada > Cheguei > Agendamento > Emissao
@@ -74,6 +76,8 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       _col_situacao as situacao_descricao,
       _col_produto as produto,
       _col_cliente as cliente,
+      _col_area_verde as area_verde,
+      _col_is_antecipado as is_antecipado,
       ts_ult,
       ano, mes, dia
       
@@ -97,6 +101,8 @@ export function getCleanMap(columns: string[]): Record<string, string> {
     evento: find(['evento', 'event', 'desc', 'ds_evento']) || 'evento',
     situacao: find(['situacao', 'status', 'ds_situacao']) || 'situacao',
     produto: find(['produto', 'mercadoria', 'material']) || 'produto',
+    area_verde: find(['area_verde', 'verde', 'green']) || 'area_verde',
+    is_antecipado: find(['antecipado', 'is_antecipado', 'antecipacao']) || 'is_antecipado',
     
     gmo_id: rawMap.id || find(['gmo_id', 'id']) || 'gmo_id',
     placa_cavalo: find(['placa', 'tracao']) || 'placa_tracao',
