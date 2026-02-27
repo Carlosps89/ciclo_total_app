@@ -2,31 +2,16 @@
 
 import {
   Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions,
-  TooltipItem
+  type ChartOptions,
+  type TooltipItem
 } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import { useEffect, useState } from 'react';
 import { Loader2, Clock } from 'lucide-react';
 import CicloHourlyDiagnosticsDrawer from './CicloHourlyDiagnosticsDrawer';
+import { registerCharts } from '@/lib/chart-init';
 
-import ChartDataLabels from 'chartjs-plugin-datalabels';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartDataLabels
-);
+// Initialized via central function inside the component
 
 interface CondensedHourlyItem {
   h: number; // 0..23
@@ -37,6 +22,7 @@ interface CondensedHourlyItem {
 }
 
 export function CicloTotalHourlyChart({ terminal, produto, praca }: { terminal: string, produto?: string, praca?: string }) {
+  registerCharts();
   const [data, setData] = useState<CondensedHourlyItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedHour, setSelectedHour] = useState<number | null>(null);

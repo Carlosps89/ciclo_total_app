@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
-    // @ts-ignore - disabling server actions to resolve persistent mismatch error
+    // @ts-expect-error - disabling server actions to resolve persistent mismatch error
     serverActions: false
   }
 };
