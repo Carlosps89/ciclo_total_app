@@ -25,7 +25,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const terminal = searchParams.get('terminal') || 'TRO';
         const produto = searchParams.get('produto');
 
-        const cacheKey = `pac_performance_monthly_${terminal}_${produto || 'all'}`;
+        const cacheKey = `pac_performance_monthly_v3_${terminal}_${produto || 'all'}`;
         const cachedData = getCached(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
@@ -55,21 +55,44 @@ export async function GET(request: Request): Promise<NextResponse> {
             , praca_stats as (
                 SELECT 
                     ${pracaMapper} as praca_nome,
-                    avg(c.ciclo_total_h) as avg_h,
-                    min(c.ciclo_total_h) as best_case,
                     count(distinct c.gmo_id) as volume,
                     
-                    -- Percentiles for Cycle Total
+                    -- Cycle Total
+                    avg(c.ciclo_total_h) as avg_h,
+                    min(c.ciclo_total_h) as best_case_total,
                     approx_percentile(c.ciclo_total_h, 0.75) as p75_total,
                     approx_percentile(c.ciclo_total_h, 0.25) as p25_total,
                     approx_percentile(c.ciclo_total_h, 0.10) as p10_total,
 
-                    -- Stages averages
+                    -- Agendamento
                     avg(c.aguardando_agendamento_h) as avg_agend,
+                    approx_percentile(c.aguardando_agendamento_h, 0.75) as p75_agend,
+                    approx_percentile(c.aguardando_agendamento_h, 0.25) as p25_agend,
+                    approx_percentile(c.aguardando_agendamento_h, 0.10) as p10_agend,
+
+                    -- Viagem
                     avg(c.tempo_viagem_h) as avg_viagem,
+                    approx_percentile(c.tempo_viagem_h, 0.75) as p75_viagem,
+                    approx_percentile(c.tempo_viagem_h, 0.25) as p25_viagem,
+                    approx_percentile(c.tempo_viagem_h, 0.10) as p10_viagem,
+
+                    -- Área Verde
                     avg(c.area_verde_cheguei_h) as avg_verde,
+                    approx_percentile(c.area_verde_cheguei_h, 0.75) as p75_verde,
+                    approx_percentile(c.area_verde_cheguei_h, 0.25) as p25_verde,
+                    approx_percentile(c.area_verde_cheguei_h, 0.10) as p10_verde,
+
+                    -- Interno
                     avg(c.tempo_interno_h) as avg_interno,
-                    avg(case when c.is_antecipado = 1 then c.ciclo_total_h end) as avg_antecip
+                    approx_percentile(c.tempo_interno_h, 0.75) as p75_interno,
+                    approx_percentile(c.tempo_interno_h, 0.25) as p25_interno,
+                    approx_percentile(c.tempo_interno_h, 0.10) as p10_interno,
+
+                    -- Antecipação
+                    avg(case when c.is_antecipado = 1 then c.antecipacao_h end) as avg_antecip,
+                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.75) as p75_antecip,
+                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.25) as p25_antecip,
+                    approx_percentile(case when c.is_antecipado = 1 then c.antecipacao_h end, 0.10) as p10_antecip
 
                 FROM calc c
                 WHERE c.peso_saida >= timestamp '${startOfMonth}' 
@@ -82,12 +105,7 @@ export async function GET(request: Request): Promise<NextResponse> {
                 (SELECT total_volume FROM monthly_stats) as total_vol,
                 (SELECT volume_target FROM monthly_stats) as vol_target,
                 (SELECT best_case FROM monthly_stats) as total_best,
-                p.praca_nome,
-                p.avg_h as praca_avg,
-                p.best_case as praca_best,
-                p.volume as praca_vol,
-                p.p75_total, p.p25_total, p.p10_total,
-                p.avg_agend, p.avg_viagem, p.avg_verde, p.avg_interno, p.avg_antecip
+                p.*
             FROM praca_stats p
             ORDER BY p.volume DESC
         `;
@@ -109,23 +127,50 @@ export async function GET(request: Request): Promise<NextResponse> {
         };
 
         const pracas = rows.map((r: Row) => {
-            const data = r.Data || [];
+            const d = r.Data || [];
+            // d[0..3] are summary fields
+            // d[4] is praca_nome
             return {
-                name: data[4]?.VarCharValue || 'OUTROS',
-                avg_h: parseFloat(data[5]?.VarCharValue || '0'),
-                best_case: parseFloat(data[6]?.VarCharValue || '0'),
-                volume: parseInt(data[7]?.VarCharValue || '0'),
+                name: d[4]?.VarCharValue || 'OUTROS',
+                volume: parseInt(d[5]?.VarCharValue || '0'),
+                avg_h: parseFloat(d[6]?.VarCharValue || '0'),
+                best_case: parseFloat(d[7]?.VarCharValue || '0'),
                 percentiles: {
-                    p75: parseFloat(data[8]?.VarCharValue || '0'),
-                    p25: parseFloat(data[9]?.VarCharValue || '0'),
-                    p10: parseFloat(data[10]?.VarCharValue || '0'),
+                    p75: parseFloat(d[8]?.VarCharValue || '0'),
+                    p25: parseFloat(d[9]?.VarCharValue || '0'),
+                    p10: parseFloat(d[10]?.VarCharValue || '0'),
                 },
                 stages: {
-                    agendamento: parseFloat(data[11]?.VarCharValue || '0'),
-                    viagem: parseFloat(data[12]?.VarCharValue || '0'),
-                    area_verde: parseFloat(data[13]?.VarCharValue || '0'),
-                    interno: parseFloat(data[14]?.VarCharValue || '0'),
-                    antecipacao: parseFloat(data[15]?.VarCharValue || '0'),
+                    agendamento: {
+                        avg: parseFloat(d[11]?.VarCharValue || '0'),
+                        p75: parseFloat(d[12]?.VarCharValue || '0'),
+                        p25: parseFloat(d[13]?.VarCharValue || '0'),
+                        p10: parseFloat(d[14]?.VarCharValue || '0'),
+                    },
+                    viagem: {
+                        avg: parseFloat(d[15]?.VarCharValue || '0'),
+                        p75: parseFloat(d[16]?.VarCharValue || '0'),
+                        p25: parseFloat(d[17]?.VarCharValue || '0'),
+                        p10: parseFloat(d[18]?.VarCharValue || '0'),
+                    },
+                    area_verde: {
+                        avg: parseFloat(d[19]?.VarCharValue || '0'),
+                        p75: parseFloat(d[20]?.VarCharValue || '0'),
+                        p25: parseFloat(d[21]?.VarCharValue || '0'),
+                        p10: parseFloat(d[22]?.VarCharValue || '0'),
+                    },
+                    interno: {
+                        avg: parseFloat(d[23]?.VarCharValue || '0'),
+                        p75: parseFloat(d[24]?.VarCharValue || '0'),
+                        p25: parseFloat(d[25]?.VarCharValue || '0'),
+                        p10: parseFloat(d[26]?.VarCharValue || '0'),
+                    },
+                    antecipacao: {
+                        avg: parseFloat(d[27]?.VarCharValue || '0'),
+                        p75: parseFloat(d[28]?.VarCharValue || '0'),
+                        p25: parseFloat(d[29]?.VarCharValue || '0'),
+                        p10: parseFloat(d[30]?.VarCharValue || '0'),
+                    }
                 }
             };
         });

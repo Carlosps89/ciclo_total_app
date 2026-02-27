@@ -68,6 +68,7 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       -- Secondary
       date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_chamada as timestamp)) / 3600.0 as area_verde_cheguei_h,
       date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp)) / 3600.0 as transito_para_terminal_h,
+      date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_janela as timestamp)) / 3600.0 as antecipacao_h,
       
       -- Calculated Logic for Flags (Safe)
       CASE WHEN try_cast(_col_cheguei as timestamp) < try_cast(_col_janela as timestamp) THEN 1 ELSE 0 END as is_antecipado,

@@ -4,6 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { X, Trophy, Zap, Loader2, Gauge, ChevronDown, ChevronUp, Target, TrendingDown, Clock, MousePointer2 } from 'lucide-react';
 import clsx from 'clsx';
 
+interface StageMetrics {
+    avg: number;
+    p75: number;
+    p25: number;
+    p10: number;
+}
+
 interface PerformanceData {
     summary: {
         avg_h: number;
@@ -23,11 +30,11 @@ interface PerformanceData {
             p10: number;
         };
         stages: {
-            agendamento: number;
-            viagem: number;
-            area_verde: number;
-            interno: number;
-            antecipacao: number;
+            agendamento: StageMetrics;
+            viagem: StageMetrics;
+            area_verde: StageMetrics;
+            interno: StageMetrics;
+            antecipacao: StageMetrics;
         };
     }[];
 }
@@ -80,7 +87,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
     const needleRotation = Math.min(Math.max(((real - 20) / 40) * 180, 0), 180);
 
     return (
-        <div className="fixed inset-0 z-110 flex justify-end">
+        <div className="fixed inset-0 z-110 flex justify-end font-sans">
             <div 
                 className="absolute inset-0 bg-black/60 backdrop-blur-md animate-in fade-in" 
                 onClick={onClose}
@@ -275,19 +282,35 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                                         <div>
                                                             <div className="flex items-center gap-2 mb-3">
                                                                 <Clock className="w-3 h-3 text-blue-400" />
-                                                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Decomposição do Ciclo (Média)</span>
+                                                                <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest">Decomposição do Ciclo (Média e Percentis)</span>
                                                             </div>
                                                             <div className="grid grid-cols-2 gap-3">
                                                                 {[
-                                                                    { label: 'Agendamento', val: p.stages.agendamento, color: 'text-gray-300' },
-                                                                    { label: 'Viagem', val: p.stages.viagem, color: 'text-gray-300' },
-                                                                    { label: 'Área Verde', val: p.stages.area_verde, color: 'text-green-500' },
-                                                                    { label: 'Interno', val: p.stages.interno, color: 'text-gray-300' },
-                                                                    { label: 'Antecipação', val: p.stages.antecipacao, color: 'text-purple-400' }
+                                                                    { label: 'Agendamento', metrics: p.stages.agendamento, color: 'text-gray-300' },
+                                                                    { label: 'Viagem', metrics: p.stages.viagem, color: 'text-gray-300' },
+                                                                    { label: 'Área Verde', metrics: p.stages.area_verde, color: 'text-green-500' },
+                                                                    { label: 'Interno', metrics: p.stages.interno, color: 'text-gray-300' },
+                                                                    { label: 'Antecipação', metrics: p.stages.antecipacao, color: 'text-purple-400' }
                                                                 ].map((s, idx) => (
-                                                                    <div key={idx} className="bg-black/40 p-3 rounded-xl border border-white/5 flex flex-col items-center justify-center text-center">
+                                                                    <div key={idx} className="bg-black/40 p-3 rounded-xl border border-white/5 flex flex-col items-center">
                                                                         <span className="text-[8px] font-black text-gray-600 uppercase mb-1 tracking-tighter">{s.label}</span>
-                                                                        <span className={clsx("text-sm font-black tracking-tight", s.color)}>{s.val.toFixed(1)}h</span>
+                                                                        <span className={clsx("text-sm font-black tracking-tight", s.color)}>{s.metrics.avg.toFixed(1)}h</span>
+                                                                        
+                                                                        {/* Discrete Percentiles */}
+                                                                        <div className="flex gap-2 mt-1.5 border-t border-white/5 pt-1 w-full justify-center">
+                                                                            <div className="flex flex-col items-center">
+                                                                                <span className="text-[6px] text-gray-500 font-black">P75</span>
+                                                                                <span className="text-[8px] text-white/70 font-bold">{s.metrics.p75.toFixed(1)}</span>
+                                                                            </div>
+                                                                            <div className="flex flex-col items-center">
+                                                                                <span className="text-[6px] text-gray-500 font-black">P25</span>
+                                                                                <span className="text-[8px] text-white/70 font-bold">{s.metrics.p25.toFixed(1)}</span>
+                                                                            </div>
+                                                                            <div className="flex flex-col items-center">
+                                                                                <span className="text-[6px] text-gray-500 font-black">P10</span>
+                                                                                <span className="text-[8px] text-white/70 font-bold">{s.metrics.p10.toFixed(1)}</span>
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -304,9 +327,9 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                                             </div>
                                                             <div className="space-y-4">
                                                                 {[
-                                                                    { label: '75% (Garantia Máxima)', val: p.percentiles.p75, desc: 'Maioria dos ciclos até este valor', pct: 75 },
-                                                                    { label: '25% (Alta Performance)', val: p.percentiles.p25, desc: 'Top 25% melhores carregamentos', pct: 25 },
-                                                                    { label: '10% (Elite / Benchmark)', val: p.percentiles.p10, desc: 'Cenário ideal recorrente', pct: 10 }
+                                                                    { label: 'P75 (Ciclo Total)', val: p.percentiles.p75, desc: 'Maioria dos ciclos até este valor', pct: 75 },
+                                                                    { label: 'P25 (Alta Performance)', val: p.percentiles.p25, desc: 'Top 25% melhores carregamentos', pct: 25 },
+                                                                    { label: 'P10 (Elite / Benchmark)', val: p.percentiles.p10, desc: 'Cenário ideal recorrente', pct: 10 }
                                                                 ].map((q, idx) => (
                                                                     <div key={idx}>
                                                                         <div className="flex justify-between items-baseline mb-1">
@@ -337,7 +360,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
 
                 {/* Footer Meta */}
                 <footer className="p-4 border-t border-gray-800 text-center bg-black/90">
-                    <p className="text-[8px] text-gray-800 font-black uppercase tracking-[0.5em]">Vision Premium Analysis • v3.5</p>
+                    <p className="text-[8px] text-gray-800 font-black uppercase tracking-[0.5em]">Vision Premium Analysis • v3.8</p>
                 </footer>
             </div>
         </div>
