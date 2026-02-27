@@ -12,7 +12,8 @@ echo "--- Iniciando Redesign/Rebuild do Sistema ---"
 git pull origin main
 
 # 2. Rebuild do Next.js (CRÍTICO para produção)
-echo "[1/2] Compilando assets do frontend..."
+echo "[1/2] Limpando cache e compilando assets..."
+rm -rf .next
 npm run build
 
 if [ $? -eq 0 ]; then
