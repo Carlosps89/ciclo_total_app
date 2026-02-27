@@ -1,23 +1,9 @@
 [
   {
-    "id": "1",
-    "name": "Administrador",
-    "email": "adm@rumo.com",
-    "password": "adm",
+    "id": "1740678857000",
+    "name": "Carlos Pereira Silva",
+    "email": "carlos.silva2@rumolog.com",
+    "password": "Caveira.767",
     "role": "ADM"
-  },
-  {
-    "id": "2",
-    "name": "Analista",
-    "email": "analista@rumo.com",
-    "password": "analista",
-    "role": "ANALISTA"
-  },
-  {
-    "id": "3",
-    "name": "Operador",
-    "email": "operacao@rumo.com",
-    "password": "operacao",
-    "role": "OPERACAO"
   }
 ]

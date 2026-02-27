@@ -8,14 +8,19 @@ export default function UserManagementPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingUser, setAddingUser] = useState(false);
+  const [error, setError] = useState('');
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'OPERACAO' });
 
   const fetchUsers = async () => {
     try {
       const res = await fetch('/api/admin/users');
-      if (res.ok) setUsers(await res.json());
+      if (res.ok) {
+        setUsers(await res.json());
+      } else {
+        setError('Falha ao carregar usuários. Verifique sua permissão.');
+      }
     } catch (e) {
-      console.error(e);
+      setError('Erro de conexão ao carregar usuários.');
     } finally {
       setLoading(false);
     }
@@ -28,6 +33,7 @@ export default function UserManagementPage() {
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddingUser(true);
+    setError('');
     try {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
@@ -37,9 +43,12 @@ export default function UserManagementPage() {
       if (res.ok) {
         setNewUser({ name: '', email: '', password: '', role: 'OPERACAO' });
         fetchUsers();
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Falha ao criar usuário.');
       }
     } catch (e) {
-      console.error(e);
+      setError('Erro de conexão ao criar usuário.');
     } finally {
       setAddingUser(false);
     }
@@ -47,15 +56,20 @@ export default function UserManagementPage() {
 
   const handleDeleteUser = async (id: string) => {
     if (!confirm('Deseja realmente excluir este usuário?')) return;
+    setError('');
     try {
       const res = await fetch('/api/admin/users', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-      if (res.ok) fetchUsers();
+      if (res.ok) {
+        fetchUsers();
+      } else {
+        setError('Falha ao excluir usuário.');
+      }
     } catch (e) {
-      console.error(e);
+      setError('Erro de conexão ao excluir usuário.');
     }
   };
 
@@ -73,6 +87,13 @@ export default function UserManagementPage() {
             </div>
           </div>
         </header>
+
+        {error && (
+          <div className="mb-8 bg-red-500/10 border border-red-500/20 text-red-200 p-4 rounded-2xl text-xs font-bold uppercase tracking-widest flex items-center gap-3">
+            <Shield className="w-4 h-4 text-red-500" />
+            {error}
+          </div>
+        )}
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* New User Form */}
