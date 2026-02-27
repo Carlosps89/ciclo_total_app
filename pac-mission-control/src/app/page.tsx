@@ -11,6 +11,7 @@ import {
   User, Shield, LogOut, Settings
 } from 'lucide-react';
 import { CicloTotalHourlyChart } from '@/components/CicloTotalHourlyChart';
+import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
 import { SummaryResponse, CycleTotalResponse, OutliersResponse, AnticipationResponse, OutlierItem, CycleTotalBucket, PracaStatsResponse, PracaStatsItem } from '@/lib/types';
 
 interface DrillDownItem {
@@ -97,6 +98,7 @@ function DashboardContent() {
 
   // Bucket Details Drawer State
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false);
+  const [selectedHourForAnalysis, setSelectedHourForAnalysis] = useState<number | null>(null);
   const [activeBucketDetails, setActiveBucketDetails] = useState<DrillDownItem[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailSearch, setDetailSearch] = useState('');
@@ -367,9 +369,13 @@ function DashboardContent() {
 
         {/* SUPPORT GRID: CICLO HORA + CICLO MES */}
         <div className="grid grid-cols-2 gap-4">
-          <Link 
-            href={`/historico?terminal=${terminal}`}
-            className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col hover:bg-gray-800/60 active:scale-95 transition-all group"
+          <button 
+            onClick={() => {
+                const now = new Date();
+                const brtHour = (now.getUTCHours() - 3 + 24) % 24;
+                setSelectedHourForAnalysis(brtHour);
+            }}
+            className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col text-left hover:bg-gray-800/60 active:scale-95 transition-all group"
           >
              <div className="flex justify-between items-start mb-2">
                 <span className="text-[10px] uppercase font-bold text-gray-400">Ciclo Última Hora</span>
@@ -379,7 +385,7 @@ function DashboardContent() {
                 <span className="text-2xl font-black text-white">{fmtH(ciclo?.ciclo_total?.hora_atual?.avg_h)}h</span>
                 <Activity className="w-4 h-4 text-blue-500 opacity-50" />
              </div>
-          </Link>
+          </button>
           <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col">
              <span className="text-[10px] uppercase font-bold text-gray-400 mb-2">Ciclo Médio Mês</span>
              <div className="flex items-center justify-between">
@@ -481,6 +487,15 @@ function DashboardContent() {
               <span className="text-[8px] font-black uppercase">Sair</span>
            </button>
         </footer>
+
+        <CicloHourlyDiagnosticsDrawer 
+            open={selectedHourForAnalysis !== null}
+            onClose={() => setSelectedHourForAnalysis(null)}
+            hour={selectedHourForAnalysis}
+            terminal={terminal}
+            produto={selectedProduto}
+            praca={selectedPraca}
+        />
       </div>
     );
   }
