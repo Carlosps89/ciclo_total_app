@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { VehicleItem } from '@/lib/types';
 import { X, CalendarClock, TrendingUp, Loader2, ChevronRight, Activity, Download } from 'lucide-react';
 import clsx from 'clsx';
-import * as xlsx from 'xlsx';
+// import * as xlsx from 'xlsx';
 export interface StageData {
     name: string;
     avg_hour: number;
@@ -108,6 +108,7 @@ export default function CicloHourlyDiagnosticsDrawer({ open, onClose, hour, term
             'DT PESO SAIDA': v.dt_peso_saida || ''
         }));
 
+        const xlsx = await import('xlsx');
         const ws = xlsx.utils.json_to_sheet(reportData);
         const wb = xlsx.utils.book_new();
         xlsx.utils.book_append_sheet(wb, ws, "Veículos");

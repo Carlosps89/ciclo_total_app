@@ -12,7 +12,7 @@ import { HistoricalHeatmap } from '@/components/HistoricalHeatmap';
 import { HistoricalTrendChart } from '@/components/HistoricalTrendChart';
 import HistoricalImpactModal from '@/components/HistoricalImpactModal';
 import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
-import * as xlsx from 'xlsx';
+// import * as xlsx from 'xlsx'; // Remove top-level import to avoid hydration/bundle issues
 import { VehicleItem } from '@/lib/types';
 
 interface SummaryData {
@@ -28,13 +28,8 @@ function HistoricalContent() {
   const terminal = searchParams.get('terminal') || 'TRO';
   
   // Date range state
-  const now = new Date();
-  const defaultEnd = now.toISOString().split('T')[0];
-  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const defaultStart = firstDayOfMonth.toISOString().split('T')[0];
-
-  const [startDate, setStartDate] = useState(searchParams.get('startDate') || defaultStart);
-  const [endDate, setEndDate] = useState(searchParams.get('endDate') || defaultEnd);
+  const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
+  const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
   const [selectedProduto, setSelectedProduto] = useState(searchParams.get('produto') || '');
   const [selectedPraca, setSelectedPraca] = useState(searchParams.get('praca') || 'TODAS');
   
@@ -51,13 +46,24 @@ function HistoricalContent() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Correct way to initialize dates to avoid hydration mismatch
+    if (!startDate || !endDate) {
+      const now = new Date();
+      const endStr = now.toISOString().split('T')[0];
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startStr = firstDay.toISOString().split('T')[0];
+      
+      if (!startDate) setStartDate(searchParams.get('startDate') || startStr);
+      if (!endDate) setEndDate(searchParams.get('endDate') || endStr);
+    }
     setMounted(true);
-  }, []);
+  }, [searchParams, startDate, endDate]);
 
   const handleExport = async () => {
     setExportLoading(true);
     try {
-        const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
+        // Dynamic import for xlsx to avoid heavy/unsafe top-level import
+        const xlsx = await import('xlsx');
         const pracaParam = selectedPraca ? `&praca=${encodeURIComponent(selectedPraca)}` : '';
         const res = await fetch(`/api/pac/historico/export?terminal=${terminal}&startDate=${startDate}&endDate=${endDate}${prodParam}${pracaParam}`);
         
@@ -131,8 +137,10 @@ function HistoricalContent() {
   }, [terminal, startDate, endDate, selectedProduto, selectedPraca]);
 
   useEffect(() => {
-    fetchSummary();
-  }, [fetchSummary]);
+    if (mounted && startDate && endDate) {
+        fetchSummary();
+    }
+  }, [fetchSummary, mounted, startDate, endDate]);
 
   // Timer for countdown and auto-refresh (only if endDate is today)
   useEffect(() => {
