@@ -74,7 +74,7 @@ export async function GET(request: Request): Promise<NextResponse> {
                 p.best_case as praca_best,
                 p.volume as praca_vol
             FROM praca_stats p
-            ORDER BY p.praca_vol DESC
+            ORDER BY p.volume DESC
         `;
 
         const results: ResultSet | undefined = await runQuery(query);
