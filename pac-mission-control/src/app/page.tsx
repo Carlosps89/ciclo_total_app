@@ -373,12 +373,13 @@ function DashboardContent() {
             onClick={() => {
                 const now = new Date();
                 const brtHour = (now.getUTCHours() - 3 + 24) % 24;
-                setSelectedHourForAnalysis(brtHour);
+                const lastHour = (brtHour - 1 + 24) % 24;
+                setSelectedHourForAnalysis(lastHour);
             }}
             className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col text-left hover:bg-gray-800/60 active:scale-95 transition-all group"
           >
              <div className="flex justify-between items-start mb-2">
-                <span className="text-[10px] uppercase font-bold text-gray-400">Ciclo Última Hora</span>
+                <span className="text-[10px] uppercase font-bold text-gray-400">Ciclo Hora Anterior</span>
                 <ChevronRight className="w-3 h-3 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
              </div>
              <div className="flex items-center justify-between">
