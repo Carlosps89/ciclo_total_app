@@ -124,6 +124,7 @@ function OrigensContent() {
 
 
   const [isMounted, setIsMounted] = useState(false);
+  const [isRankingOpen, setIsRankingOpen] = useState(false);
   useEffect(() => { setIsMounted(true); }, []);
 
   // Separate origins with/without coordinates
@@ -172,31 +173,31 @@ function OrigensContent() {
       </div>
 
       {/* FLOATING HEADER / CONTROLS */}
-      <header className="absolute top-6 left-6 right-80 z-10 flex flex-col gap-4 pointer-events-none">
+      <header className="absolute top-4 left-4 right-4 md:right-80 md:top-6 md:left-6 z-10 flex flex-col gap-3 md:gap-4 pointer-events-none">
         {/* Title & Back Button */}
-        <div className="flex items-center gap-4 pointer-events-auto">
-          <Link href="/" className="p-3 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl transition text-white/70 hover:text-white hover:border-green-500/50 group">
+        <div className="flex items-center gap-3 md:gap-4 pointer-events-auto">
+          <Link href="/" className="p-2.5 md:p-3 bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-2xl transition text-white/70 hover:text-white hover:border-green-500/50 group">
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           </Link>
-          <div className="bg-black/60 backdrop-blur-xl border border-white/10 p-4 px-6 rounded-3xl shadow-2xl">
-            <h1 className="text-xl font-black tracking-tighter text-white uppercase flex items-center gap-3 leading-none italic">
+          <div className="bg-black/60 backdrop-blur-xl border border-white/10 p-3 px-4 md:p-4 md:px-6 rounded-2xl md:rounded-3xl shadow-2xl">
+            <h1 className="text-lg md:text-xl font-black tracking-tighter text-white uppercase flex items-center gap-2 md:gap-3 leading-none italic">
                <span className="text-green-500">MAPA DE ORIGENS</span>
             </h1>
-            <p className="text-white/40 text-[9px] mt-1 uppercase tracking-[0.3em] font-bold">
+            <p className="text-white/40 text-[8px] md:text-[9px] mt-1 uppercase tracking-[0.2em] md:tracking-[0.3em] font-bold">
                Performance Logística • TRO
             </p>
           </div>
         </div>
 
         {/* Floating Filters Card */}
-        <div className="flex items-center gap-3 pointer-events-auto w-fit bg-black/60 backdrop-blur-xl border border-white/10 p-2 pl-4 rounded-2xl shadow-2xl">
-              <div className="flex items-center gap-2 border-r border-white/10 pr-4 mr-1">
+        <div className="flex flex-wrap items-center gap-2 md:gap-3 pointer-events-auto w-fit bg-black/60 backdrop-blur-xl border border-white/10 p-2 rounded-xl md:rounded-2xl shadow-2xl overflow-x-auto max-w-[95vw]">
+              <div className="flex items-center gap-1.5 md:gap-2 mr-1">
                 {['today', 'week', 'month'].map(r => (
                     <button
                         key={r}
                         onClick={() => setRange(r)}
                         className={clsx(
-                            "px-4 py-1.5 text-[10px] font-black uppercase rounded-xl transition-all",
+                            "px-3 md:px-4 py-1.5 text-[9px] md:text-[10px] font-black uppercase rounded-lg md:rounded-xl transition-all whitespace-nowrap",
                             range === r ? "bg-green-500 text-black shadow-lg shadow-green-500/20" : "text-white/40 hover:text-white hover:bg-white/5"
                         )}
                     >
@@ -205,10 +206,12 @@ function OrigensContent() {
                 ))}
               </div>
 
+              <div className="h-6 w-px bg-white/10 hidden md:block" />
+
               <select 
                 value={selectedProduto} 
                 onChange={e => setSelectedProduto(e.target.value)}
-                className="bg-transparent text-white rounded-xl text-[10px] uppercase font-bold px-3 py-2 cursor-pointer outline-none hover:bg-white/5 transition border border-white/5 focus:border-green-500/50"
+                className="bg-gray-900/50 text-white rounded-lg md:rounded-xl text-[9px] md:text-[10px] uppercase font-bold px-2 md:px-3 py-1.5 md:py-2 cursor-pointer outline-none hover:bg-white/5 transition border border-white/5 focus:border-green-500/50 min-w-[100px]"
               >
                 <option value="" className="bg-gray-950">TODOS PRODUTOS</option>
                 {availableProdutos.map(p => <option key={p} value={p} className="bg-gray-950">{p}</option>)}
@@ -217,16 +220,35 @@ function OrigensContent() {
               <select 
                 value={selectedPraca} 
                 onChange={e => setSelectedPraca(e.target.value)}
-                className="bg-transparent text-white rounded-xl text-[10px] uppercase font-bold px-3 py-2 cursor-pointer outline-none hover:bg-white/5 transition border border-white/5 focus:border-green-500/50"
+                className="bg-gray-900/50 text-white rounded-lg md:rounded-xl text-[9px] md:text-[10px] uppercase font-bold px-2 md:px-3 py-1.5 md:py-2 cursor-pointer outline-none hover:bg-white/5 transition border border-white/5 focus:border-green-500/50"
               >
                 {availablePracas.map(p => <option key={p} value={p} className="bg-gray-950">{p}</option>)}
               </select>
         </div>
       </header>
+
+      {/* MOBILE TRIGGER FOR RANKING */}
+      <button 
+        onClick={() => setIsRankingOpen(true)}
+        className="md:hidden fixed bottom-6 right-6 z-20 p-4 bg-green-500 text-black rounded-full shadow-2xl animate-bounce-subtle flex items-center gap-2"
+      >
+        <TrendingUp className="w-6 h-6" />
+        <span className="font-black text-xs uppercase tracking-tighter pr-1">Ranking</span>
+      </button>
       
       {/* RANKING SIDEBAR (RIGHT) */}
-      <aside className="absolute top-6 bottom-6 right-6 w-72 z-10 flex flex-col pointer-events-none">
-          <div className="flex-1 bg-black/60 backdrop-blur-xl border border-white/10 rounded-[32px] p-6 shadow-2xl pointer-events-auto flex flex-col overflow-hidden">
+      <aside className={clsx(
+          "fixed md:absolute inset-y-0 right-0 w-full md:w-72 z-30 md:z-10 flex flex-col transition-transform duration-500 md:translate-x-0",
+          "p-4 md:p-0 md:top-6 md:right-6 md:bottom-6",
+          isRankingOpen ? "translate-x-0" : "translate-x-full md:translate-x-0"
+      )}>
+          {/* Mobile Overlay */}
+          <div 
+            className="md:hidden absolute inset-0 bg-black/60 backdrop-blur-sm -z-10" 
+            onClick={() => setIsRankingOpen(false)}
+          />
+
+          <div className="flex-1 bg-black/80 md:bg-black/60 backdrop-blur-2xl md:backdrop-blur-xl border border-white/10 rounded-[24px] md:rounded-[32px] p-5 md:p-6 shadow-2xl flex flex-col overflow-hidden pointer-events-auto relative">
               <div className="flex items-center justify-between mb-6 shrink-0">
                   <div className="flex items-center gap-2">
                       <div className="w-8 h-8 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center justify-center">
@@ -234,6 +256,12 @@ function OrigensContent() {
                       </div>
                       <h3 className="text-xs font-black text-white uppercase tracking-widest">RANKING DE ORIGENS</h3>
                   </div>
+                  <button 
+                    onClick={() => setIsRankingOpen(false)}
+                    className="md:hidden p-2 text-white/50 hover:text-white"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
               </div>
 
               {/* Summary Stats */}

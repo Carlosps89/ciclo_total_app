@@ -4,12 +4,8 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
-import {
-  AlertCircle, Clock,
-  Activity, CalendarDays, CalendarClock, TrendingUp,
-  X, ChevronRight, Loader2, CheckCircle, Search, Calendar,
-  User, Shield, LogOut, Settings, Menu, Map
-} from 'lucide-react';
+import { Menu, X, Map, CalendarDays, Settings, LogOut, Shield, User, Activity, TrendingUp, Calendar, ChevronRight, Download, Loader2, Gauge, AlertCircle, Clock, CalendarClock, CheckCircle, Search } from 'lucide-react';
+import { PerformanceCockpitDrawer } from '@/components/PerformanceCockpitDrawer';
 import { CicloTotalHourlyChart } from '@/components/CicloTotalHourlyChart';
 import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
 import { SummaryResponse, CycleTotalResponse, OutliersResponse, AnticipationResponse, OutlierItem, CycleTotalBucket, PracaStatsResponse, PracaStatsItem } from '@/lib/types';
@@ -100,6 +96,7 @@ function DashboardContent() {
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false);
   const [selectedHourForAnalysis, setSelectedHourForAnalysis] = useState<number | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isPerformanceOpen, setIsPerformanceOpen] = useState(false);
   const [activeBucketDetails, setActiveBucketDetails] = useState<DrillDownItem[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailSearch, setDetailSearch] = useState('');
@@ -547,10 +544,14 @@ function DashboardContent() {
         </div>
 
         {/* BOTTOM NAV - SIMPLIFIED */}
-        <footer className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-gray-800 p-2 px-6 flex justify-center items-center z-50">
+        <footer className="fixed bottom-0 left-0 right-0 bg-[#0a0a0a]/90 backdrop-blur-xl border-t border-gray-800 p-2 px-6 flex justify-around items-center z-50">
            <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex flex-col items-center gap-1">
               <Activity className="w-5 h-5 text-blue-500" />
               <span className="text-[8px] font-black uppercase text-blue-500">Dashboard</span>
+           </button>
+           <button onClick={() => setIsPerformanceOpen(true)} className="flex flex-col items-center gap-1">
+              <Gauge className="w-5 h-5 text-gray-400" />
+              <span className="text-[8px] font-black uppercase text-gray-400">Cockpit</span>
            </button>
         </footer>
 
@@ -561,6 +562,13 @@ function DashboardContent() {
             terminal={terminal}
             produto={selectedProduto}
             praca={selectedPraca}
+        />
+
+        <PerformanceCockpitDrawer 
+            open={isPerformanceOpen}
+            onClose={() => setIsPerformanceOpen(false)}
+            terminal={terminal}
+            produto={selectedProduto}
         />
       </div>
     );
