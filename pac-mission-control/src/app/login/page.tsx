@@ -40,40 +40,47 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#010b1a] relative overflow-hidden font-sans">
-      {/* Background Gradients & Effects */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#002d5a]/30 rounded-full blur-[120px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#32a3dd]/10 rounded-full blur-[120px]" />
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] pointer-events-none" />
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden font-sans">
+      {/* Background Image with Blue Shadow Overlay */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/images/login-bg.png')" }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-[#010b1a]/95 via-[#001a33]/85 to-[#010b1a]/95" />
+      
+      {/* Decorative Lights */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#002d5a]/40 rounded-full blur-[120px]" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#32a3dd]/20 rounded-full blur-[120px]" />
 
       {/* Grid Overlay */}
       <div 
-        className="absolute inset-0 opacity-[0.05] pointer-events-none" 
+        className="absolute inset-0 opacity-[0.03] pointer-events-none" 
         style={{ backgroundImage: 'radial-gradient(#32a3dd 1px, transparent 1px)', backgroundSize: '30px 30px' }}
       />
 
       <div className="z-10 w-full max-w-[420px] px-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
         {/* Login Card */}
-        <div className="bg-[#0a1628]/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        <div className="bg-[#0a1628]/70 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative overflow-hidden">
           {/* Top highlight bar */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[#32a3dd]/50 to-transparent" />
 
-          {/* RUMO LOGO (SVG Official Reproduction) */}
+          {/* RUMO LOGO (Official Reproduction) */}
           <div className="mb-10 flex flex-col items-center">
-            <div className="flex items-center gap-3">
-              <svg viewBox="0 0 200 60" className="w-48 h-12 text-white fill-current">
-                {/* Stylized Rumo Icon (Swirl/R) */}
-                <path d="M30 0C13.4 0 0 13.4 0 30s13.4 30 30 30h10V50h-10c-11 0-20-9-20-20s9-20 20-20h10v-5c0-2.8 2.2-5 5-5h5V0h-20z" opacity="0.9"/>
-                <path d="M35 15c-8.3 0-15 6.7-15 15h5c0-5.5 4.5-10 10-10V15z" />
-                <path d="M50 30c0 8.3-6.7 15-15 15v5c11 0 20-9 20-20s-9-20-20-20v5c5.5 0 10 4.5 10 10z" />
-                
-                {/* Text: rumo (Approximated official bold lowercase) */}
-                <text x="65" y="42" style={{ font: 'bold 42px sans-serif', letterSpacing: '-2px' }}>rumo</text>
-              </svg>
-            </div>
-            <h1 className="text-xl font-black text-white mt-6 tracking-[3px] uppercase text-center leading-tight">
+            <svg viewBox="0 0 240 80" className="w-48 h-16 text-white fill-current">
+              {/* Lowercase "rumo" text reproduction using paths for precision */}
+              <path d="M15 45c0-10 8-15 20-15h5v25h-5v-18h-2c-8 0-13 4-13 10v8h-5v-10zM55 30h5v25h-5v-3h-1c-3 3-7 5-11 5-8 0-14-6-14-14s6-14 14-14c4 0 8 2 11 5v-4zm-11 19c5 0 10-4 10-10s-5-10-10-10-10 4-10 10 5 10 10 10zM75 30h5v3c3-3 7-5 11-5 8 0 14 6 14 14s-6 14-14 14c-4 0-8-2-11-5v13h-5V30zm16 19c5 0 10-4 10-10s-5-10-10-10-10 4-10 10 5 10 10 10zM140 43c0 8-6 14-14 14s-14-6-14-14c0-8 6-14 14-14s14 6 14 14zm-14 9c5 0 9-4 9-9s-4-9-9-9-9 4-9 9 4 9 9 9z" transform="translate(0, -5)" />
+              
+              {/* Circular Swirl Icon */}
+              <g transform="translate(160, 30) scale(0.6)">
+                <path d="M30 0C13.5 0 0 13.5 0 30c0 1.5.1 3 .3 4.5l14-4.5c-.2-1-.3-2-.3-3 0-9 7.3-16.3 16.3-16.3 1 0 2 .1 3 .3L38 1s-4-1-8-1z" opacity="0.9" />
+                <path d="M60 30c0 16.5-13.5 30-30 30-1.5 0-3-.1-4.5-.3l4.5-14c1 .2 2 .3 3 .3 9 0 16.3-7.3 16.3-16.3 0-1-.1-2-.3-3L59 22s1 4 1 8z" opacity="0.8" />
+                <path d="M0 30C0 13.5 13.5 0 30 0c1.5 0 3 .1 4.5.3l-4.5 14c-1-.2-2-.3-3-.3-9 0-16.3 7.3-16.3 16.3 0 1 .1 2 .3 3L1 38s-1-4-1-8z" opacity="0.7" />
+              </g>
+            </svg>
+            
+            <h2 className="text-sm font-black text-white/90 mt-4 tracking-[4px] uppercase text-center border-t border-white/10 pt-4 w-full">
               Centro de Controle Rodoviário
-            </h1>
+            </h2>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
