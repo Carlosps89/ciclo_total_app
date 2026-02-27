@@ -7,7 +7,8 @@ import clsx from 'clsx';
 import {
   AlertCircle, Clock,
   Activity, CalendarDays, CalendarClock, TrendingUp,
-  X, ChevronRight, Loader2, CheckCircle, Search, Calendar
+  X, ChevronRight, Loader2, CheckCircle, Search, Calendar,
+  User, Shield, LogOut, Settings
 } from 'lucide-react';
 import { CicloTotalHourlyChart } from '@/components/CicloTotalHourlyChart';
 import { SummaryResponse, CycleTotalResponse, OutliersResponse, AnticipationResponse, OutlierItem, CycleTotalBucket, PracaStatsResponse, PracaStatsItem } from '@/lib/types';
@@ -56,6 +57,21 @@ function DashboardContent() {
   const [lastFetch, setLastFetch] = useState<string>('');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(60);
+  const [session, setSession] = useState<any>(null);
+
+  // Fetch Session
+  useEffect(() => {
+    fetch('/api/auth/session').then(res => {
+      if (res.ok) res.json().then(data => setSession(data.user));
+    });
+  }, []);
+
+  const handleLogout = async () => {
+    const res = await fetch('/api/logout', { method: 'POST' });
+    if (res.ok) {
+      window.location.href = '/login';
+    }
+  };
 
   // Histogram State
   const [selectedBucket, setSelectedBucket] = useState<{ bucket: string; count: number; pct: number } | null>(null);
@@ -93,6 +109,7 @@ function DashboardContent() {
   };
 
   const handleHistogramClick = (bucketData: { bucket: string; count: number; pct: number }) => {
+    if (session?.role === 'OPERACAO') return; // Bloqueio Operação
     setSelectedBucket(bucketData);
     setIsDetailsDrawerOpen(true);
     fetchBucketDetails(bucketData.bucket);
@@ -277,21 +294,25 @@ function DashboardContent() {
       <header className="flex justify-between items-center border-b border-gray-800 pb-2 shrink-0">
         <div>
           <h1 className="text-2xl font-black tracking-tight text-white uppercase flex items-center gap-3">
-            <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]" />
-            CENTRO DE CONTROLE RODOVIARIO - CICLO TOTAL
+            <div className="w-3 h-3 rounded-full bg-[#32a3dd] animate-pulse shadow-[0_0_10px_#32a3dd]" />
+            CENTRO DE CONTROLE RODOVIÁRIO - CICLO TOTAL
           </h1>
           <p className="text-white/90 text-xs mt-1 uppercase tracking-widest font-sans">
-            Ciclo Rodoviário • Monitoramento em Tempo Real • Terminal {terminal}
+            Monitoramento em Tempo Real • Terminal {terminal}
           </p>
           <div className="mt-2 flex items-center gap-3">
-             <Link href={`/forecast?terminal=${terminal}`} className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] font-bold text-blue-300 uppercase tracking-wider transition">
-                <TrendingUp className="w-3 h-3" />
-                Ver Projeção de Fila (D+3)
-             </Link>
-             <Link href={`/historico?terminal=${terminal}`} className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] font-bold text-emerald-300 uppercase tracking-wider transition">
-                <Calendar className="w-3 h-3" />
-                Análise Histórica
-             </Link>
+             {session?.role !== 'OPERACAO' && (
+                <>
+                  <Link href={`/forecast?terminal=${terminal}`} className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] font-bold text-blue-300 uppercase tracking-wider transition">
+                      <TrendingUp className="w-3 h-3" />
+                      Projeção de Fila
+                  </Link>
+                  <Link href={`/historico?terminal=${terminal}`} className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] font-bold text-emerald-300 uppercase tracking-wider transition">
+                      <Calendar className="w-3 h-3" />
+                      Análise Histórica
+                  </Link>
+                </>
+             )}
              <select 
                 value={selectedProduto} 
                 onChange={e => setSelectedProduto(e.target.value)}
@@ -311,7 +332,35 @@ function DashboardContent() {
              </select>
           </div>
         </div>
-        <div className="text-right flex flex-col items-end">
+        <div className="text-right flex items-center gap-6">
+          {/* USER PROFILE & LOGOUT */}
+          <div className="flex items-center gap-3 bg-gray-900/50 border border-gray-800 rounded-2xl px-4 py-2">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] font-black text-white uppercase tracking-wider leading-none">{session?.name || 'Usuário'}</span>
+              <span className={`text-[8px] font-bold px-1 rounded mt-1 ${session?.role === 'ADM' ? 'bg-purple-500/20 text-purple-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                {session?.role || '...'}
+              </span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center border border-gray-700">
+              {session?.role === 'ADM' ? <Shield className="w-4 h-4 text-purple-400" /> : <User className="w-4 h-4 text-blue-400" />}
+            </div>
+            <div className="flex items-center gap-1 border-l border-gray-800 pl-3 ml-1">
+              {session?.role === 'ADM' && (
+                <Link href="/admin/users" title="Gestão de Usuários" className="p-1.5 hover:bg-gray-800 rounded transition text-gray-400 hover:text-white">
+                  <Settings className="w-4 h-4" />
+                </Link>
+              )}
+              <button 
+                onClick={handleLogout}
+                title="Sair do Sistema"
+                className="p-1.5 hover:bg-red-500/10 rounded transition text-gray-400 hover:text-red-500"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="text-right flex flex-col items-end">
           <div className="text-xs font-sans text-white/80 mb-px flex items-center gap-3">
             <div 
               onClick={() => setAutoRefresh(!autoRefresh)}
@@ -356,7 +405,8 @@ function DashboardContent() {
           </div>
 
         </div>
-      </header>
+      </div>
+    </header>
 
       {/* CONTENT GRID */}
       <div className="flex-1 grid gap-4 min-h-0 xl:grid-cols-12 relative">

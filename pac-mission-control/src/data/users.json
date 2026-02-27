@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1",
+    "name": "Administrador",
+    "email": "adm@rumo.com",
+    "password": "adm",
+    "role": "ADM"
+  },
+  {
+    "id": "2",
+    "name": "Analista",
+    "email": "analista@rumo.com",
+    "password": "analista",
+    "role": "ANALISTA"
+  },
+  {
+    "id": "3",
+    "name": "Operador",
+    "email": "operacao@rumo.com",
+    "password": "operacao",
+    "role": "OPERACAO"
+  }
+]
