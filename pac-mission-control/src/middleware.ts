@@ -72,7 +72,16 @@ export async function middleware(request: NextRequest) {
   }
 }
 
-// MATCHER TOTAL: Intercepta TUDO
+// MATCHER: Permite arquivos estáticos e imagens sem passar pelo middleware
 export const config = {
-  matcher: ['/((?!api/health).*)'], // Deixa apenas um health check se houver, o resto trava
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - images (pasta de imagens na raiz do public)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|images|public).*)',
+  ],
 };
