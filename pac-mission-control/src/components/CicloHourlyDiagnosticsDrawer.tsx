@@ -383,7 +383,7 @@ export default function CicloHourlyDiagnosticsDrawer({ open, onClose, hour, term
                             <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar text-left">
                                 <div className="flex flex-col gap-6 relative">
                                     {/* Visual Line connecting stages */}
-                                    <div className="absolute left-[31px] top-8 bottom-8 w-0.5 bg-gradient-to-b from-blue-500/50 via-purple-500/50 to-emerald-500/50 hidden sm:block"></div>
+                                    <div className="absolute left-[31px] top-8 bottom-8 w-0.5 bg-linear-to-b from-blue-500/50 via-purple-500/50 to-emerald-500/50 hidden sm:block"></div>
 
                                     {/* Stage 1: Aguardando Agendamento */}
                                     <StageCard 

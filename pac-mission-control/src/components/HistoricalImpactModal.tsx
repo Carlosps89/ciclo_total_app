@@ -599,12 +599,12 @@ export default function HistoricalImpactModal({
                                         <p className="text-[10px] text-orange-200/60 font-medium">
                                             A maior oportunidade de ganho para {p.label} está na etapa de <strong className="text-orange-400 font-black">
                                                 {Object.entries({
-                                                    'Agendamento': p.stages.agendamento,
-                                                    'Viagem': p.stages.viagem,
-                                                    'Área Verde': p.stages.verde,
-                                                    'Interno': p.stages.interno
-                                                }).sort((a,b) => (b[1].real - b[1].best) - (a[1].real - a[1].best))[0][0]}
-                                            </strong>, com um desvio de {Math.max(...Object.values(p.stages).filter((_,i) => i < 4).map(s => s.real - s.best)).toFixed(1)}h por veículo.
+                                                    'Agendamento': p.stages?.agendamento || { real: 0, best: 0 },
+                                                    'Viagem': p.stages?.viagem || { real: 0, best: 0 },
+                                                    'Área Verde': p.stages?.verde || { real: 0, best: 0 },
+                                                    'Interno': p.stages?.interno || { real: 0, best: 0 }
+                                                }).sort((a,b) => ((b[1]?.real || 0) - (b[1]?.best || 0)) - ((a[1]?.real || 0) - (a[1]?.best || 0)))[0][0]}
+                                            </strong>, com um desvio de {(Math.max(...Object.values(p.stages || {}).filter((_,i) => i < 4).map(s => (s?.real || 0) - (s?.best || 0))) || 0).toFixed(1)}h por veículo.
                                         </p>
                                     </div>
                                 </div>
