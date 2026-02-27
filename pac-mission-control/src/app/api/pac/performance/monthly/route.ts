@@ -57,7 +57,20 @@ export async function GET(request: Request): Promise<NextResponse> {
                     ${pracaMapper} as praca_nome,
                     avg(c.ciclo_total_h) as avg_h,
                     min(c.ciclo_total_h) as best_case,
-                    count(distinct c.gmo_id) as volume
+                    count(distinct c.gmo_id) as volume,
+                    
+                    -- Percentiles for Cycle Total
+                    approx_percentile(c.ciclo_total_h, 0.75) as p75_total,
+                    approx_percentile(c.ciclo_total_h, 0.25) as p25_total,
+                    approx_percentile(c.ciclo_total_h, 0.10) as p10_total,
+
+                    -- Stages averages
+                    avg(c.aguardando_agendamento_h) as avg_agend,
+                    avg(c.tempo_viagem_h) as avg_viagem,
+                    avg(case when c.area_verde = 'Sim' then c.tempo_interno_h end) as avg_verde,
+                    avg(c.tempo_interno_h) as avg_interno,
+                    avg(case when c.is_antecipado = 1 then c.ciclo_total_h end) as avg_antecip
+
                 FROM calc c
                 WHERE c.peso_saida >= timestamp '${startOfMonth}' 
                   AND c.peso_saida <= timestamp '${endOfMonth}'
@@ -72,7 +85,9 @@ export async function GET(request: Request): Promise<NextResponse> {
                 p.praca_nome,
                 p.avg_h as praca_avg,
                 p.best_case as praca_best,
-                p.volume as praca_vol
+                p.volume as praca_vol,
+                p.p75_total, p.p25_total, p.p10_total,
+                p.avg_agend, p.avg_viagem, p.avg_verde, p.avg_interno, p.avg_antecip
             FROM praca_stats p
             ORDER BY p.volume DESC
         `;
@@ -100,6 +115,18 @@ export async function GET(request: Request): Promise<NextResponse> {
                 avg_h: parseFloat(data[5]?.VarCharValue || '0'),
                 best_case: parseFloat(data[6]?.VarCharValue || '0'),
                 volume: parseInt(data[7]?.VarCharValue || '0'),
+                percentiles: {
+                    p75: parseFloat(data[8]?.VarCharValue || '0'),
+                    p25: parseFloat(data[9]?.VarCharValue || '0'),
+                    p10: parseFloat(data[10]?.VarCharValue || '0'),
+                },
+                stages: {
+                    agendamento: parseFloat(data[11]?.VarCharValue || '0'),
+                    viagem: parseFloat(data[12]?.VarCharValue || '0'),
+                    area_verde: parseFloat(data[13]?.VarCharValue || '0'),
+                    interno: parseFloat(data[14]?.VarCharValue || '0'),
+                    antecipacao: parseFloat(data[15]?.VarCharValue || '0'),
+                }
             };
         });
 
