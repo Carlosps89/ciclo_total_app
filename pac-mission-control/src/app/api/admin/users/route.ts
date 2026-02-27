@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { getSession } from '@/lib/auth';
 
-const USERS_FILE = path.join(process.cwd(), 'src/data/users.json');
+const USERS_FILE = process.env.USERS_PATH || path.join(process.cwd(), 'src/data/users.json');
 
 export async function GET() {
   const session = await getSession();
@@ -22,10 +22,16 @@ export async function POST(request: Request) {
   }
 
   const users = JSON.parse(await fs.readFile(USERS_FILE, 'utf-8'));
-  const newUser = await request.json();
+  const body = await request.json();
   
-  // Gerar ID simples
-  newUser.id = String(Date.now());
+  const newUser = {
+    id: String(Date.now()),
+    name: body.name?.trim(),
+    email: body.email?.trim().toLowerCase(),
+    password: body.password?.trim(),
+    role: body.role
+  };
+
   users.push(newUser);
 
   await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));

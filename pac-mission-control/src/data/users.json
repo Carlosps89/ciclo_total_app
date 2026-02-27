@@ -5,5 +5,12 @@
     "email": "carlos.silva2@rumolog.com",
     "password": "Caveira.767",
     "role": "ADM"
+  },
+  {
+    "name": "Gabriel Silva",
+    "email": "gabriel.silva@rumolog.com",
+    "password": "Rumo@2024",
+    "role": "OPERACAO",
+    "id": "1772216385744"
   }
 ]

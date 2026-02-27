@@ -1,13 +1,24 @@
 import { NextResponse } from 'next/server';
 import { login } from '@/lib/auth';
-import users from '@/data/users.json';
+import fs from 'fs/promises';
+import path from 'path';
+
+const USERS_FILE = process.env.USERS_PATH || path.join(process.cwd(), 'src/data/users.json');
 
 export async function POST(request: Request) {
   try {
     const { email, password } = await request.json();
+    const cleanEmail = email?.trim().toLowerCase();
+    const cleanPassword = password?.trim();
 
-    // Buscar usuário no store JSON
-    const user = users.find(u => u.email === email && u.password === password);
+    // Ler usuário do store JSON dinamicamente (evita cache do import)
+    const data = await fs.readFile(USERS_FILE, 'utf-8');
+    const users = JSON.parse(data);
+
+    const user = users.find((u: any) => 
+      u.email.toLowerCase() === cleanEmail && 
+      u.password === cleanPassword
+    );
 
     if (!user) {
       return NextResponse.json(
