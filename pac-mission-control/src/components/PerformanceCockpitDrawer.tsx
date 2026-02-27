@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, Loader2, Gauge, ChevronDown, ChevronUp, MousePointer2, TrendingUp } from 'lucide-react';
+import { X, Trophy, Loader2, Gauge, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 
 interface StageMetrics {
@@ -83,20 +83,14 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
     
     // Attainment % (Atingimento)
     // For Cycle time, we want real <= meta. 
-    // If real=meta, attainment=100%. If real is higher, attainment is lower.
     const atingimento = real > 0 ? (meta / real) * 100 : 0;
     
-    // Scale for semi-circle (0 to 180 degrees)
-    // 0% Attainment = Ruim (Left)
-    // 100% Attainment = Excelente (Right)
-    const rotation = Math.min(Math.max((atingimento / 100) * 180, 0), 180);
-
-    // Color Logic for Gauge
+    // Color Logic for Gauge (Matching Web Palette)
     const getGaugeColor = (pct: number) => {
-        if (pct >= 100) return '#10b981'; // Emerald
-        if (pct >= 90) return '#22c55e';  // Green
-        if (pct >= 80) return '#eab308';  // Yellow
-        if (pct >= 70) return '#f97316';  // Orange
+        if (pct >= 95) return '#10b981'; // Emerald
+        if (pct >= 85) return '#22c55e';  // Green
+        if (pct >= 75) return '#eab308';  // Yellow
+        if (pct >= 65) return '#f97316';  // Orange
         return '#ef4444';                // Red
     };
 
@@ -105,182 +99,187 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
     return (
         <div className="fixed inset-0 z-110 flex justify-end font-sans">
             <div 
-                className="absolute inset-0 bg-black/70 backdrop-blur-md animate-in fade-in" 
+                className="absolute inset-0 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" 
                 onClick={onClose}
             />
             
-            <div className="relative w-full max-w-xl bg-[#090b0d] border-l border-white/5 h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden text-gray-100">
+            <div className="relative w-full max-w-xl bg-[#05070a] border-l border-white/10 h-full shadow-[0_0_100px_rgba(0,0,0,0.8)] flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden text-gray-100">
                 {/* Header */}
-                <header className="px-6 py-5 border-b border-white/5 flex justify-between items-center shrink-0 bg-[#0d1117]">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-500/10 rounded-xl">
+                <header className="px-6 py-6 border-b border-white/5 flex justify-between items-center shrink-0 bg-[#0d1117]">
+                    <div className="flex items-center gap-4">
+                        <div className="p-2.5 bg-blue-600/10 rounded-2xl border border-blue-500/20">
                             <Gauge className="w-5 h-5 text-blue-500" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-black text-white tracking-tight uppercase italic flex items-center gap-2">
+                            <h2 className="text-xl font-black text-white tracking-tight uppercase italic leading-none flex items-center gap-2">
                                 Cockpit Premium
-                                <span className="bg-blue-600 text-[8px] not-italic px-1.5 py-0.5 rounded text-white tracking-widest font-black">V4</span>
+                                <span className="bg-blue-600 text-[9px] not-italic px-1.5 py-0.5 rounded text-white tracking-widest font-black shadow-lg">V4.2</span>
                             </h2>
-                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Performance • Mensal • {terminal}</p>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1 opacity-60">Performance • Mensal • {terminal}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition text-gray-500">
+                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition text-gray-500 hover:text-white">
                         <X className="w-6 h-6" />
                     </button>
                 </header>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-10 custom-scrollbar pb-32 focus:outline-none">
+                <div className="flex-1 overflow-y-auto p-6 space-y-12 custom-scrollbar pb-32 focus:outline-none">
                     {loading || !data || !summary ? (
                         <div className="h-full flex flex-col items-center justify-center py-20">
-                            <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-4" />
-                            <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">
-                                Consolidando Diagnóstico...
+                            <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
+                            <p className="text-[11px] font-black text-gray-500 uppercase tracking-[0.5em] text-center animate-pulse">
+                                Auditoria de Dados em Tempo Real...
                             </p>
                         </div>
                     ) : (
                         <>
-                            {/* VELOCIMETER - MATCHING FOTO 3 */}
-                            <section className="flex flex-col items-center py-8 relative bg-[#0d1117]/40 rounded-[40px] border border-white/5 shadow-inner">
-                                <div className="text-[10px] text-gray-400 font-black uppercase tracking-[0.3em] mb-2 opacity-80">
+                            {/* CLEAN VELOCIMETER - NO NEEDLES, JUST PROGRESS */}
+                            <section className="flex flex-col items-center py-10 relative">
+                                <div className="text-[11px] text-gray-400 font-black uppercase tracking-[0.4em] mb-4 opacity-70">
                                     ATINGIMENTO: {atingimento.toFixed(1)}%
                                 </div>
                                 
-                                <div className="relative w-80 h-44">
-                                    <svg viewBox="0 0 100 55" className="w-full h-full">
+                                <div className="relative w-80 h-44 group">
+                                    <svg viewBox="0 0 100 55" className="w-full h-full drop-shadow-2xl">
+                                        <defs>
+                                            <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                                <stop offset="0%" stopColor="#ef4444" />
+                                                <stop offset="50%" stopColor="#eab308" />
+                                                <stop offset="100%" stopColor="#10b981" />
+                                            </linearGradient>
+                                        </defs>
                                         {/* Background Track */}
                                         <path 
                                             d="M 12 45 A 38 38 0 0 1 88 45" 
                                             fill="none" 
-                                            stroke="#161b22" 
-                                            strokeWidth="7" 
+                                            stroke="#ffffff" 
+                                            strokeOpacity="0.05"
+                                            strokeWidth="8" 
                                             strokeLinecap="round" 
                                         />
-                                        {/* Foreground Progress */}
+                                        {/* Foreground Progress Arc */}
                                         <path 
                                             d="M 12 45 A 38 38 0 0 1 88 45" 
                                             fill="none" 
                                             stroke={gaugeColor} 
-                                            strokeWidth="7" 
+                                            strokeWidth="8" 
                                             strokeLinecap="round"
-                                            strokeDasharray="125.6"
-                                            strokeDashoffset={125.6 * (1 - Math.min(atingimento/100, 1))}
-                                            style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.5s ease-in-out' }}
+                                            strokeDasharray="119.38" 
+                                            strokeDashoffset={119.38 * (1 - Math.min(atingimento/100, 1))}
+                                            style={{ transition: 'stroke-dashoffset 2s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.8s ease' }}
                                         />
-                                        
-                                        {/* Cursor/Pin Point */}
-                                        <g transform={`rotate(${rotation - 180}, 50, 45)`}>
-                                            <circle cx="50" cy="7" r="2" fill="white" className="shadow-lg" />
-                                        </g>
                                     </svg>
                                     
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center pt-10">
-                                        <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mb-1 opacity-60 italic">Média do Período</span>
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center pt-8">
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-1 opacity-60 italic">Média do Período</span>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-6xl font-black text-white tracking-tighter drop-shadow-2xl">{real.toFixed(1)}</span>
+                                            <span className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">{real.toFixed(1)}</span>
                                             <span className="text-2xl font-black text-gray-500">H</span>
                                         </div>
                                     </div>
 
-                                    <div className="absolute bottom-6 left-6 text-[10px] font-black text-gray-700 uppercase tracking-[0.1em] italic">Ruim</div>
-                                    <div className="absolute bottom-6 right-6 text-[10px] font-black text-gray-200 uppercase tracking-[0.1em] italic">Excelente</div>
+                                    <div className="absolute bottom-5 left-6 text-[11px] font-bold text-gray-700 uppercase tracking-widest italic">Ruim</div>
+                                    <div className="absolute bottom-5 right-6 text-[11px] font-bold text-gray-200 uppercase tracking-widest italic">Excelente</div>
                                 </div>
                             </section>
 
                             {/* DIAGNÓSTICO GRID */}
                             <section>
-                                <div className="flex items-center gap-2 mb-6 px-2">
-                                    <Trophy className="w-4 h-4 text-yellow-500" />
-                                    <h3 className="text-[11px] font-black text-white uppercase tracking-[0.2em] italic">Diagnóstico por Praça</h3>
-                                    <div className="flex-1 h-px bg-white/5 ml-2" />
+                                <div className="flex items-center gap-3 mb-8 px-2">
+                                    <Trophy className="w-5 h-5 text-yellow-500/80 shadow-lg" />
+                                    <h3 className="text-xs font-black text-white uppercase tracking-[0.3em] italic">Diagnóstico por Praça</h3>
+                                    <div className="flex-1 h-px bg-white/10 ml-2" />
                                 </div>
 
-                                <div className="space-y-4">
+                                <div className="space-y-6">
                                     {data.pracas?.map((p, i) => {
                                         const isExpanded = expandedPraca === p.name;
                                         return (
                                             <div key={i} className={clsx(
-                                                "border transition-all duration-300 rounded-[32px] overflow-hidden",
-                                                isExpanded ? "bg-[#0d1117] border-blue-500/40 shadow-blue-500/10" : "bg-[#0d1117]/30 border-white/5 hover:bg-[#0d1117]/50"
+                                                "border transition-all duration-300 rounded-[36px] overflow-hidden",
+                                                isExpanded ? "bg-[#0d1117] border-blue-500/40 shadow-2xl scale-[1.02]" : "bg-[#0d1117]/30 border-white/5 hover:bg-[#0d1117]/50"
                                             )}>
                                                 <button 
                                                     onClick={() => setExpandedPraca(isExpanded ? null : p.name)}
-                                                    className="w-full p-6 flex items-center justify-between group focus:outline-none"
+                                                    className="w-full p-7 flex items-center justify-between group focus:outline-none"
                                                 >
-                                                    <div className="flex flex-col items-start">
-                                                        <span className="text-sm font-black text-white uppercase tracking-tight group-hover:text-blue-400 transition-colors">{p.name}</span>
-                                                        <div className="flex items-center gap-2 mt-1 opacity-40">
-                                                            <span className="text-[8px] font-bold uppercase tracking-widest">{p.volume} veículos</span>
+                                                    <div className="flex flex-col items-start translate-x-0 group-hover:translate-x-1 transition-transform">
+                                                        <span className="text-base font-black text-white uppercase tracking-tight group-hover:text-blue-400 transition-colors">{p.name}</span>
+                                                        <div className="flex items-center gap-2 mt-1.5 opacity-40">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                                            <span className="text-[9px] font-bold uppercase tracking-[0.2em]">{p.volume} veículos auditados</span>
                                                         </div>
                                                     </div>
 
                                                     <div className="flex items-center gap-8">
                                                         <div className="text-right">
-                                                            <div className={clsx("text-2xl font-black tracking-tighter", p.avg_h <= 40 ? "text-emerald-500" : "text-white")}>
-                                                                {p.avg_h.toFixed(1)}<span className="text-xs ml-0.5 opacity-20">h</span>
+                                                            <div className={clsx("text-3xl font-black tracking-tighter drop-shadow-lg", p.avg_h <= 40 ? "text-emerald-500" : "text-white")}>
+                                                                {p.avg_h.toFixed(1)}<span className="text-sm ml-0.5 opacity-20">h</span>
                                                             </div>
                                                         </div>
-                                                        <div className={clsx("p-2 rounded-xl transition-all", isExpanded ? "bg-blue-600 text-white shadow-lg" : "bg-white/5 text-gray-500 group-hover:text-gray-300")}>
-                                                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                                                        <div className={clsx("p-2.5 rounded-2xl transition-all", isExpanded ? "bg-blue-600 text-white shadow-xl rotate-180" : "bg-white/5 text-gray-500 group-hover:bg-white/10 group-hover:text-gray-300")}>
+                                                            <ChevronDown className="w-4 h-4" />
                                                         </div>
                                                     </div>
                                                 </button>
 
-                                                {/* EXPANDED STAGES - MATCHING FOTO 1 & 2 */}
+                                                {/* EXPANDED STAGES - HIGHLIGHTED CARDS */}
                                                 {isExpanded && (
-                                                    <div className="px-6 pb-8 animate-in slide-in-from-top-4 duration-500 grid grid-cols-1 gap-4 overflow-hidden">
+                                                    <div className="px-7 pb-10 animate-in slide-in-from-top-4 duration-500 grid grid-cols-1 gap-5 overflow-hidden">
                                                         {[
                                                             { label: 'AGENDAMENTO', key: 'agendamento' as const, isAnticipation: false },
                                                             { label: 'VIAGEM', key: 'viagem' as const, isAnticipation: false },
                                                             { label: 'ÁREA VERDE', key: 'area_verde' as const, isAnticipation: false },
-                                                            { label: 'INTERNO', key: 'interno' as const, isAnticipation: false },
+                                                            { label: 'TEMPO INTERNO', key: 'interno' as const, isAnticipation: false },
                                                             { label: 'ANTECIPAÇÃO', key: 'antecipacao' as const, isAnticipation: true }
                                                         ].map((s) => {
                                                             const m = p.stages[s.key];
                                                             return (
-                                                                <div key={s.label} className="bg-white/[0.015] border border-white/[0.03] rounded-[30px] p-6 relative group/card hover:border-white/10 transition-colors">
+                                                                <div key={s.label} className="bg-white/[0.02] border border-white/[0.05] rounded-[32px] p-7 relative group/card hover:border-white/10 hover:bg-white/[0.04] transition-all">
                                                                     <div className="flex justify-between items-start mb-6">
-                                                                        {/* TITLE HIGHLIGHT */}
-                                                                        <span className="text-[10px] font-black text-gray-200 bg-white/5 px-2 py-0.5 rounded uppercase tracking-[0.2em] shadow-sm">
+                                                                        {/* TITLE HIGHLIGHT - ENHANCED FOCUS */}
+                                                                        <span className="text-[11px] font-black text-white bg-blue-600/20 px-3 py-1 rounded-lg uppercase tracking-[0.3em] border border-blue-500/20 shadow-sm">
                                                                             {s.label}
                                                                         </span>
                                                                         {s.isAnticipation && (
-                                                                            <div className="bg-emerald-500/10 px-2 py-1 rounded-lg flex items-center gap-1">
-                                                                                <TrendingUp className="w-3 h-3 text-emerald-500" />
+                                                                            <div className="bg-emerald-500/10 px-2.5 py-1 rounded-lg flex items-center gap-1.5 border border-emerald-500/20">
+                                                                                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                                                                                 <span className="text-[10px] font-black text-emerald-500">POTENCIAL</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
 
-                                                                    <div className="flex items-baseline gap-1 mb-6">
-                                                                        <span className="text-5xl font-black text-white tracking-tighter">{m.avg.toFixed(0)}</span>
-                                                                        <span className="text-xl font-black text-gray-700">h</span>
+                                                                    <div className="flex items-baseline gap-2 mb-8 translate-x-1">
+                                                                        <span className="text-6xl font-black text-white tracking-tighter">{m.avg.toFixed(0)}</span>
+                                                                        <span className="text-2xl font-black text-gray-700 italic">h</span>
                                                                     </div>
 
-                                                                    <div className="space-y-3.5 pt-5 border-t border-white/[0.03]">
+                                                                    <div className="space-y-4 pt-6 border-t border-white/[0.05]">
                                                                         <div className="flex justify-between items-center group/line">
-                                                                            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest group-hover/line:text-gray-300 transition-colors">Resto 75%</span>
-                                                                            <span className={clsx("text-[11px] font-black", s.isAnticipation ? "text-emerald-500/70" : "text-red-500/70")}>
-                                                                                {m.p75.toFixed(1)}H
+                                                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest group-hover/line:text-gray-300 transition-colors italic">Resto 75%</span>
+                                                                            <span className={clsx("text-sm font-black transition-colors", s.isAnticipation ? "text-emerald-500/50" : "text-red-500/60 group-hover/line:text-red-500")}>
+                                                                                {m.p75.toFixed(1)}<span className="text-[10px] ml-0.5">h</span>
                                                                             </span>
                                                                         </div>
                                                                         <div className="flex justify-between items-center group/line">
-                                                                            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest group-hover/line:text-gray-300 transition-colors">Bench P25</span>
-                                                                            <span className="text-[11px] font-black text-emerald-500">
-                                                                                {m.p25.toFixed(1)}H
+                                                                            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest group-hover/line:text-gray-300 transition-colors italic">Bench P25</span>
+                                                                            <span className="text-sm font-black text-emerald-500/80 group-hover/line:text-emerald-400">
+                                                                                {m.p25.toFixed(1)}<span className="text-[10px] ml-0.5">h</span>
                                                                             </span>
                                                                         </div>
                                                                         <div className="flex justify-between items-center group/line">
-                                                                            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest group-hover/line:text-gray-300 transition-colors">Elite P10</span>
-                                                                            <span className="text-[11px] font-black text-emerald-400 brightness-150">
-                                                                                {m.p10.toFixed(1)}H
+                                                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover/line:text-gray-200 transition-colors italic">Elite P10</span>
+                                                                            <span className="text-sm font-black text-emerald-400 brightness-125 drop-shadow-[0_0_8px_rgba(52,211,153,0.3)]">
+                                                                                {m.p10.toFixed(1)}<span className="text-[10px] ml-0.5">h</span>
                                                                             </span>
                                                                         </div>
                                                                     </div>
 
-                                                                    <div className="mt-6 h-1 w-full bg-white/5 rounded-full overflow-hidden flex">
-                                                                        <div className={clsx("h-full", s.isAnticipation ? "bg-emerald-500/20 w-1/4" : "bg-red-500/40 w-1/3")} />
-                                                                        <div className={clsx("h-full", s.isAnticipation ? "bg-emerald-500/50 w-2/4" : "bg-emerald-500/40 w-1/3")} />
-                                                                        <div className={clsx("h-full shadow-[0_0_10px_rgba(16,185,129,0.5)]", s.isAnticipation ? "bg-emerald-500 w-1/4" : "bg-emerald-500 w-1/3")} />
+                                                                    {/* PROGRESS BAR - WEB DASHBOARD STYLE */}
+                                                                    <div className="mt-8 h-1.5 w-full bg-white/5 rounded-full overflow-hidden flex gap-1 animate-in fade-in duration-700">
+                                                                        <div className={clsx("h-full rounded-full transition-all duration-1000", s.isAnticipation ? "bg-emerald-500/10 w-1/4" : "bg-red-500/30 w-1/3")} />
+                                                                        <div className={clsx("h-full rounded-full transition-all duration-1000", s.isAnticipation ? "bg-emerald-500/40 w-2/4" : "bg-emerald-500/30 w-1/3")} />
+                                                                        <div className={clsx("h-full rounded-full transition-all duration-1000 shadow-lg", s.isAnticipation ? "bg-emerald-500 w-1/4" : "bg-emerald-500 w-1/3")} />
                                                                     </div>
                                                                 </div>
                                                             );
@@ -296,11 +295,11 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                     )}
                 </div>
 
-                {/* Footer Metadata */}
-                <footer className="px-6 py-4 border-t border-white/5 bg-[#090b0d] text-center flex flex-col items-center gap-3">
-                    <p className="text-[9px] text-gray-800 font-black uppercase tracking-[0.5em] italic">Intelligence Cockpit • v4.1 • Mobile</p>
-                    <div className="w-24 h-0.5 bg-white/5 rounded-full overflow-hidden relative">
-                        <div className="absolute inset-0 bg-blue-600 w-1/3 animate-marquee" />
+                {/* Performance metadata footer */}
+                <footer className="px-8 py-5 border-t border-white/5 bg-[#090b0d] flex flex-col items-center gap-4">
+                    <p className="text-[10px] text-gray-800 font-black uppercase tracking-[0.6em] italic opacity-80">Intelligence Engine • Analytics v4.2</p>
+                    <div className="w-32 h-1 bg-white/5 rounded-full overflow-hidden relative">
+                        <div className="absolute inset-0 bg-blue-600/40 w-1/3 animate-marquee" />
                     </div>
                 </footer>
             </div>
