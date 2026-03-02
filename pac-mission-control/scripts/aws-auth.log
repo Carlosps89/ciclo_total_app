@@ -83,3 +83,43 @@ Successfully logged into Start URL: https://d-94670c90c8.awsapps.com/start/#
 [!] Sessão expirada. Iniciando login automático...
 /Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
 [X] Erro ao tentar realizar o login.
+--- Verificação em: Fri Feb 27 18:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Sat Feb 28 01:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Sat Feb 28 10:04:52 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Sat Feb 28 11:00:02 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Mon Mar  2 07:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Mon Mar  2 08:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Mon Mar  2 09:00:01 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
+--- Verificação em: Mon Mar  2 10:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.
