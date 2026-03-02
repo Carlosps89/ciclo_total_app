@@ -57,7 +57,8 @@ export async function GET(request: Request): Promise<NextResponse> {
           WHERE (_col_cheguei is not null OR _col_agendamento is not null)
             -- Still in terminal or not yet arrived
             AND (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            -- Limit range (Last 3 days for active, or from today onwards for scheduled)
+            -- Limit range (Last 3 days for active, today onwards for scheduled, and Emission max 15 days)
+            AND try_cast(_col_emissao as timestamp) >= date_add('day', -15, now())
             AND (
               (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -3, now()))
               OR 
