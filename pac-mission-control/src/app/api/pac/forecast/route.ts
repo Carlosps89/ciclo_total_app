@@ -44,7 +44,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           WHERE base.${map.terminal} = '${terminal}'
             ${produtoFilter}
             AND try_cast(${map.dt_cheguei} as timestamp) >= date_add('day', -3, now())
-            AND (try_cast(${map.dt_peso_saida} as timestamp) IS NULL OR ${map.dt_peso_saida} = '')
+            AND (try_cast(${map.dt_peso_saida} as timestamp) IS NULL OR coalesce(cast(${map.dt_peso_saida} as varchar), '') = '')
       ),
       projections AS (
           -- Step 3: Project exit time and total cycle for each active truck
