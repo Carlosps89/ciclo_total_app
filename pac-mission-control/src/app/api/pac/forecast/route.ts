@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_VIEW, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
@@ -30,6 +30,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${map.dt_cheguei} as _col_cheguei,
             ${map.dt_chegada} as _col_chegada,
             ${map.dt_peso_saida} as _col_peso_saida,
+            ${map.dt_agendamento} as _col_agendamento,
             greatest(
                 coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
                 coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
@@ -46,42 +47,45 @@ export async function GET(request: Request): Promise<NextResponse> {
               FROM raw_data
           ) WHERE rn = 1
       ),
-      terminal_stats AS (
-          -- Step 1: Calculate historical throughput (vazao): trucks/hour in the last 3 days
-          SELECT 
-            -- We avoid division by zero and provide a sane default (e.g. 10 trucks/hour)
-            coalesce(count(*) / nullif(date_diff('hour', date_add('day', -3, now()), now()), 0), 10.0) as throughput_per_hour
-          FROM dedupped
-          WHERE try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
-      ),
-      active_trucks AS (
-          -- Step 2: Get active trucks ranked by arrival (MUST have dt_cheguei)
+      active_universe AS (
+          -- Step 1: Arrived trucks (active) + Scheduled trucks (future)
           SELECT 
             _col_id as gmo_id,
             try_cast(_col_emissao as timestamp) as dt_emissao,
-            row_number() OVER (ORDER BY try_cast(_col_cheguei as timestamp)) as queue_pos
+            coalesce(try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)) as dt_queue
           FROM dedupped
-          WHERE try_cast(_col_cheguei as timestamp) IS NOT NULL 
+          WHERE (_col_cheguei is not null OR _col_agendamento is not null)
+            -- Still in terminal or not yet arrived
             AND (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            AND try_cast(_col_cheguei as timestamp) >= date_add('day', -3, now())
+            -- Limit range (Last 3 days for active, or from today onwards for scheduled)
+            AND (
+              (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -3, now()))
+              OR 
+              (_col_agendamento is not null AND try_cast(_col_agendamento as timestamp) >= date_trunc('day', now()))
+            )
+      ),
+      ranked_queue AS (
+          -- Step 2: Order by arrival (already arrived first, then scheduled)
+          SELECT 
+            *,
+            row_number() OVER (ORDER BY dt_queue) as queue_pos
+          FROM active_universe
       ),
       projections AS (
-          -- Step 3: Project exit time based on queue position and throughput
-          -- Estimated Exit = Now + (Queue_Position / Throughput)
+          -- Step 3: Shift processing with fixed capacity (72/h)
           SELECT 
-            t.gmo_id,
-            t.dt_emissao,
-            now() + interval '1' hour * (cast(t.queue_pos as double) / s.throughput_per_hour) as expected_exit,
-            (date_diff('second', t.dt_emissao, now()) / 3600.0) + (cast(t.queue_pos as double) / s.throughput_per_hour) as projected_cycle_h
-          FROM active_trucks t
-          CROSS JOIN terminal_stats s
+            r.gmo_id,
+            r.dt_emissao,
+            -- Fixed throughput = 72 vehicles / hour
+            now() + interval '1' hour * (cast(r.queue_pos as double) / 72.0) as expected_exit,
+            (date_diff('second', r.dt_emissao, now()) / 3600.0) + (cast(r.queue_pos as double) / 72.0) as projected_cycle_h
+          FROM ranked_queue r
       )
       SELECT 
         date_trunc('hour', expected_exit) as exit_hour,
         avg(projected_cycle_h) as avg_cycle_h,
         count(*) as truck_count,
-        (SELECT count(*) FROM active_trucks) as total_active,
-        (SELECT throughput_per_hour FROM terminal_stats) as debug_throughput
+        (SELECT count(*) FROM ranked_queue) as total_monitorado
       FROM projections
       GROUP BY 1
       ORDER BY 1`;
@@ -95,15 +99,14 @@ export async function GET(request: Request): Promise<NextResponse> {
       truck_count: parseInt(r.Data[2].VarCharValue || '0')
     }));
 
-    const totalActive = rows.length > 0 ? parseInt(rows[0].Data[3].VarCharValue || '0') : 0;
-    const debugAvgWait = rows.length > 0 ? parseFloat(rows[0].Data[4].VarCharValue || '0') : 0;
+    const totalMonitorado = rows.length > 0 ? parseInt(rows[0].Data[3].VarCharValue || '0') : 0;
 
     return NextResponse.json({
       terminal,
       updated_at: new Date().toISOString(),
+      capacity_h: 72,
       debug: {
-        total_active: totalActive,
-        avg_wait_used: debugAvgWait,
+        total_active: totalMonitorado,
         map_cols: map
       },
       forecast: data
