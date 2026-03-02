@@ -84,6 +84,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       SELECT 
         date_trunc('hour', expected_exit) as exit_hour,
         avg(projected_cycle_h) as avg_cycle_h,
+        max(projected_cycle_h) as max_cycle_h,
         count(*) as truck_count,
         (SELECT count(*) FROM ranked_queue) as total_monitorado
       FROM projections
@@ -96,10 +97,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     const data = rows.map((r: any) => ({
       hour: r.Data[0].VarCharValue,
       avg_cycle_h: parseFloat(r.Data[1].VarCharValue || '0'),
-      truck_count: parseInt(r.Data[2].VarCharValue || '0')
+      max_cycle_h: parseFloat(r.Data[2].VarCharValue || '0'),
+      truck_count: parseInt(r.Data[3].VarCharValue || '0')
     }));
 
-    const totalMonitorado = rows.length > 0 ? parseInt(rows[0].Data[3].VarCharValue || '0') : 0;
+    const totalMonitorado = rows.length > 0 ? parseInt(rows[0].Data[4].VarCharValue || '0') : 0;
 
     return NextResponse.json({
       terminal,
