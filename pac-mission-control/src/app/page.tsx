@@ -556,6 +556,10 @@ function DashboardContent() {
               <Activity className="w-5 h-5 text-blue-500" />
               <span className="text-[8px] font-black uppercase text-blue-500">Dashboard</span>
            </button>
+           <Link href="/forecast" className="flex flex-col items-center gap-1">
+              <TrendingUp className="w-5 h-5 text-purple-400" />
+              <span className="text-[8px] font-black uppercase text-purple-400">Previsão</span>
+           </Link>
            <button onClick={() => setIsPerformanceOpen(true)} className="flex flex-col items-center gap-1">
               <Gauge className="w-5 h-5 text-gray-400" />
               <span className="text-[8px] font-black uppercase text-gray-400">Cockpit</span>

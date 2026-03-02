@@ -295,12 +295,15 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                     )}
                 </div>
 
-                {/* Performance metadata footer */}
                 <footer className="px-8 py-5 border-t border-white/5 bg-[#090b0d] flex flex-col items-center gap-4">
+                    <button 
+                        onClick={() => window.location.href = '/forecast'}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                    >
+                        <TrendingUp className="w-4 h-4" />
+                        Ver Previsão de Recuperação
+                    </button>
                     <p className="text-[10px] text-gray-800 font-black uppercase tracking-[0.6em] italic opacity-80">Intelligence Engine • Analytics v4.2</p>
-                    <div className="w-32 h-1 bg-white/5 rounded-full overflow-hidden relative">
-                        <div className="absolute inset-0 bg-blue-600/40 w-1/3 animate-marquee" />
-                    </div>
                 </footer>
             </div>
         </div>
