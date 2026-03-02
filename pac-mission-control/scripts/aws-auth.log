@@ -133,3 +133,8 @@ Successfully logged into Start URL: https://d-94670c90c8.awsapps.com/start/#
 [!] Sessão expirada. Iniciando login automático...
 /Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
 [X] Erro ao tentar realizar o login.
+--- Verificação em: Mon Mar  2 13:00:00 -04 2026 ---
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 17: aws: command not found
+[!] Sessão expirada. Iniciando login automático...
+/Users/carlospereira/ciclo_total_app/pac-mission-control/scripts/aws-sso-keepalive.sh: line 22: aws: command not found
+[X] Erro ao tentar realizar o login.

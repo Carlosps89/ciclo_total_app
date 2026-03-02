@@ -46,46 +46,41 @@ export async function GET(request: Request): Promise<NextResponse> {
               FROM raw_data
           ) WHERE rn = 1
       ),
-      stage_averages AS (
+      terminal_stats AS (
+          -- Step 1: Calculate historical throughput (vazao): trucks/hour in the last 3 days
           SELECT 
-            coalesce(avg(date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_chegada as timestamp)) / 3600.0), 2.0) as avg_cheguei_to_chegada,
-            coalesce(avg(date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_peso_saida as timestamp)) / 3600.0), 1.5) as avg_chegada_to_saida
+            -- We avoid division by zero and provide a sane default (e.g. 10 trucks/hour)
+            coalesce(count(*) / nullif(date_diff('hour', date_add('day', -3, now()), now()), 0), 10.0) as throughput_per_hour
           FROM dedupped
           WHERE try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
       ),
       active_trucks AS (
+          -- Step 2: Get active trucks ranked by arrival
           SELECT 
             _col_id as gmo_id,
             try_cast(_col_emissao as timestamp) as dt_emissao,
-            try_cast(_col_cheguei as timestamp) as dt_cheguei,
-            try_cast(_col_chegada as timestamp) as dt_chegada
+            row_number() OVER (ORDER BY coalesce(try_cast(_col_cheguei as timestamp), try_cast(_col_emissao as timestamp))) as queue_pos
           FROM dedupped
-          WHERE try_cast(_col_cheguei as timestamp) >= date_add('day', -7, now())
-            AND (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
+          WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
+            AND try_cast(_col_cheguei as timestamp) >= date_add('day', -7, now())
       ),
       projections AS (
+          -- Step 3: Project exit time based on queue position and throughput
+          -- Estimated Exit = Now + (Queue_Position / Throughput)
           SELECT 
             t.gmo_id,
             t.dt_emissao,
-            -- Projecao de saida = AGORA + Tempo que falta (media)
-            CASE 
-              WHEN t.dt_chegada IS NULL THEN now() + interval '1' hour * (s.avg_cheguei_to_chegada + s.avg_chegada_to_saida)
-              ELSE now() + interval '1' hour * s.avg_chegada_to_saida
-            END as expected_exit,
-            -- Ciclo projetado = (AGORA - EMISSAO) + Tempo que falta (media)
-            CASE 
-              WHEN t.dt_chegada IS NULL THEN (date_diff('second', t.dt_emissao, now()) / 3600.0) + s.avg_cheguei_to_chegada + s.avg_chegada_to_saida
-              ELSE (date_diff('second', t.dt_emissao, now()) / 3600.0) + s.avg_chegada_to_saida
-            END as projected_cycle_h
+            now() + interval '1' hour * (cast(t.queue_pos as double) / s.throughput_per_hour) as expected_exit,
+            (date_diff('second', t.dt_emissao, now()) / 3600.0) + (cast(t.queue_pos as double) / s.throughput_per_hour) as projected_cycle_h
           FROM active_trucks t
-          CROSS JOIN stage_averages s
+          CROSS JOIN terminal_stats s
       )
       SELECT 
         date_trunc('hour', expected_exit) as exit_hour,
         avg(projected_cycle_h) as avg_cycle_h,
         count(*) as truck_count,
         (SELECT count(*) FROM active_trucks) as total_active,
-        (SELECT avg_cheguei_to_chegada FROM stage_averages) as debug_avg_wait
+        (SELECT throughput_per_hour FROM terminal_stats) as debug_throughput
       FROM projections
       GROUP BY 1
       ORDER BY 1`;
