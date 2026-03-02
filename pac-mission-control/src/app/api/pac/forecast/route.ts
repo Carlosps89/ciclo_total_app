@@ -55,14 +55,15 @@ export async function GET(request: Request): Promise<NextResponse> {
           WHERE try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
       ),
       active_trucks AS (
-          -- Step 2: Get active trucks ranked by arrival
+          -- Step 2: Get active trucks ranked by arrival (MUST have dt_cheguei)
           SELECT 
             _col_id as gmo_id,
             try_cast(_col_emissao as timestamp) as dt_emissao,
-            row_number() OVER (ORDER BY coalesce(try_cast(_col_cheguei as timestamp), try_cast(_col_emissao as timestamp))) as queue_pos
+            row_number() OVER (ORDER BY try_cast(_col_cheguei as timestamp)) as queue_pos
           FROM dedupped
-          WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            AND try_cast(_col_cheguei as timestamp) >= date_add('day', -7, now())
+          WHERE try_cast(_col_cheguei as timestamp) IS NOT NULL 
+            AND (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
+            AND try_cast(_col_cheguei as timestamp) >= date_add('day', -3, now())
       ),
       projections AS (
           -- Step 3: Project exit time based on queue position and throughput
