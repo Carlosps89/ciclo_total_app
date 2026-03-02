@@ -82,7 +82,7 @@ function ForecastContent() {
         mode: 'index' as const,
         intersect: false,
         callbacks: {
-          label: (context: { parsed: { y: number } }) => `Ciclo: ${context.parsed.y.toFixed(1)}h`
+          label: (context: { parsed: { y: number | null } }) => `Ciclo: ${(context.parsed.y ?? 0).toFixed(1)}h`
         }
       }
     },
@@ -123,7 +123,7 @@ function ForecastContent() {
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-slate-500">
               <p className="text-xl">Nenhum caminhão ativo para projeção.</p>
-              <p className="text-sm">Os dados aparecem conforme caminhões entram no fluxo "CHEGUEI".</p>
+              <p className="text-sm">Os dados aparecem conforme caminhões entram no fluxo &quot;CHEGUEI&quot;.</p>
             </div>
           )}
         </div>
