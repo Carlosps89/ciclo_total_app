@@ -67,10 +67,12 @@ export async function GET(request: Request): Promise<NextResponse> {
           SELECT 
             t.gmo_id,
             t.dt_emissao,
+            -- Projecao de saida = AGORA + Tempo que falta (media)
             CASE 
               WHEN t.dt_chegada IS NULL THEN now() + interval '1' hour * (s.avg_cheguei_to_chegada + s.avg_chegada_to_saida)
               ELSE now() + interval '1' hour * s.avg_chegada_to_saida
             END as expected_exit,
+            -- Ciclo projetado = (AGORA - EMISSAO) + Tempo que falta (media)
             CASE 
               WHEN t.dt_chegada IS NULL THEN (date_diff('second', t.dt_emissao, now()) / 3600.0) + s.avg_cheguei_to_chegada + s.avg_chegada_to_saida
               ELSE (date_diff('second', t.dt_emissao, now()) / 3600.0) + s.avg_chegada_to_saida
