@@ -11,7 +11,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const produto: string | null = searchParams.get('produto');
     const praca: string | null = searchParams.get('praca');
 
-    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`)
+    const TARGET_VIEW: string = 'VW_Ciclo';
+
+    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
       .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
       .then((cols: string[]) => getCleanMap(cols));
 
@@ -20,28 +22,46 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const query: string = `
       ${pracaFilter.cte}
-      ${pracaFilter.cte ? ',' : 'WITH'} stage_averages AS (
+      ${pracaFilter.cte ? ',' : 'WITH'} raw_data AS (
           SELECT 
-            coalesce(avg(date_diff('second', try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_chegada} as timestamp)) / 3600.0), 2.0) as avg_cheguei_to_chegada,
-            coalesce(avg(date_diff('second', try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_peso_saida} as timestamp)) / 3600.0), 1.5) as avg_chegada_to_saida
-          FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" base
+            ${map.id} as _col_id,
+            ${map.terminal} as _col_terminal,
+            ${map.dt_emissao} as _col_emissao,
+            ${map.dt_cheguei} as _col_cheguei,
+            ${map.dt_chegada} as _col_chegada,
+            ${map.dt_peso_saida} as _col_peso_saida,
+            greatest(
+                coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
+                coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
+                coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00')
+            ) as ts_ult
+          FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
           ${pracaFilter.join}
           WHERE base.${map.terminal} = '${terminal}'
             ${produtoFilter}
-            AND try_cast(${map.dt_peso_saida} as timestamp) >= date_add('day', -3, now())
+      ),
+      dedupped AS (
+          SELECT * FROM (
+              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
+              FROM raw_data
+          ) WHERE rn = 1
+      ),
+      stage_averages AS (
+          SELECT 
+            coalesce(avg(date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_chegada as timestamp)) / 3600.0), 2.0) as avg_cheguei_to_chegada,
+            coalesce(avg(date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_peso_saida as timestamp)) / 3600.0), 1.5) as avg_chegada_to_saida
+          FROM dedupped
+          WHERE try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
       ),
       active_trucks AS (
           SELECT 
-            ${map.id} as gmo_id,
-            try_cast(${map.dt_emissao} as timestamp) as dt_emissao,
-            try_cast(${map.dt_cheguei} as timestamp) as dt_cheguei,
-            try_cast(${map.dt_chegada} as timestamp) as dt_chegada
-          FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" base
-          ${pracaFilter.join}
-          WHERE base.${map.terminal} = '${terminal}'
-            ${produtoFilter}
-            AND try_cast(${map.dt_cheguei} as timestamp) >= date_add('day', -7, now())
-            AND (try_cast(${map.dt_peso_saida} as timestamp) IS NULL OR coalesce(cast(${map.dt_peso_saida} as varchar), '') = '')
+            _col_id as gmo_id,
+            try_cast(_col_emissao as timestamp) as dt_emissao,
+            try_cast(_col_cheguei as timestamp) as dt_cheguei,
+            try_cast(_col_chegada as timestamp) as dt_chegada
+          FROM dedupped
+          WHERE try_cast(_col_cheguei as timestamp) >= date_add('day', -7, now())
+            AND (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
       ),
       projections AS (
           SELECT 
@@ -57,24 +77,16 @@ export async function GET(request: Request): Promise<NextResponse> {
             END as projected_cycle_h
           FROM active_trucks t
           CROSS JOIN stage_averages s
-      ),
-      stats AS (
-          SELECT
-            (SELECT count(*) FROM active_trucks) as count_active,
-            (SELECT count(*) FROM projections) as count_projections,
-            (SELECT avg_cheguei_to_chegada FROM stage_averages) as avg_wait,
-            (SELECT avg_chegada_to_saida FROM stage_averages) as avg_internal
       )
       SELECT 
         date_trunc('hour', expected_exit) as exit_hour,
         avg(projected_cycle_h) as avg_cycle_h,
         count(*) as truck_count,
-        (SELECT count_active FROM stats) as total_active,
-        (SELECT avg_wait FROM stats) as debug_avg_wait
+        (SELECT count(*) FROM active_trucks) as total_active,
+        (SELECT avg_cheguei_to_chegada FROM stage_averages) as debug_avg_wait
       FROM projections
-      GROUP BY 1, 4, 5
-      ORDER BY 1
-    `;
+      GROUP BY 1
+      ORDER BY 1`;
 
     const results: ResultSet | undefined = await runQuery(query);
     const rows = results?.Rows?.slice(1) || [];
