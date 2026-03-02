@@ -31,19 +31,24 @@ interface ForecastDataItem {
   truck_count: number;
 }
 
-export default function ForecastPage() {
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+
+function ForecastContent() {
+  const searchParams = useSearchParams();
+  const terminal = searchParams.get('terminal') || 'TRO';
   const [data, setData] = useState<ForecastDataItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/pac/forecast?terminal=TRO')
+    fetch(`/api/pac/forecast?terminal=${terminal}`)
       .then(res => res.json())
       .then(json => {
         setData(json.forecast || []);
         setLoading(false);
       })
       .catch(err => console.error(err));
-  }, []);
+  }, [terminal]);
 
   const chartData = {
     labels: data.map(d => {
@@ -77,7 +82,7 @@ export default function ForecastPage() {
         mode: 'index' as const,
         intersect: false,
         callbacks: {
-          label: (context: any) => `Ciclo: ${context.parsed.y.toFixed(1)}h`
+          label: (context: { parsed: { y: number } }) => `Ciclo: ${context.parsed.y.toFixed(1)}h`
         }
       }
     },
@@ -124,7 +129,7 @@ export default function ForecastPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-            <div className="bg-[#02132b] p-6 rounded-2xl border border-white/5">
+              <div className="bg-[#02132b] p-6 rounded-2xl border border-white/5">
                 <h3 className="text-slate-400 text-sm font-medium mb-4 uppercase tracking-wider">Metodologia</h3>
                 <p className="text-sm text-slate-300 leading-relaxed">
                     Calculamos o tempo já decorrido desde a emissão e somamos a média histórica das etapas restantes (Viagem/Interno) para projetar a curva de recuperação.
@@ -140,7 +145,7 @@ export default function ForecastPage() {
             </div>
             <div className="bg-[#02132b] p-6 rounded-2xl border border-white/5 flex flex-col justify-center items-center">
                 <button 
-                  onClick={() => window.location.href = '/'}
+                  onClick={() => window.location.href = `/?terminal=${terminal}`}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
                 >
                     Voltar para Cockpit
@@ -149,5 +154,13 @@ export default function ForecastPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ForecastPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>}>
+      <ForecastContent />
+    </Suspense>
   );
 }

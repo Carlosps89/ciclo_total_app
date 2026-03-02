@@ -22,9 +22,10 @@ export async function GET(request: Request): Promise<NextResponse> {
       ${pracaFilter.cte}
       ${pracaFilter.cte ? ',' : 'WITH'} stage_averages AS (
           -- Step 1: Calculate historical averages for remaining stages (Last 3 days)
+          -- We wrap this in a subquery to guarantee a row even if no matches found
           SELECT 
-            avg(date_diff('second', try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_chegada} as timestamp)) / 3600.0) as avg_cheguei_to_chegada,
-            avg(date_diff('second', try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_peso_saida} as timestamp)) / 3600.0) as avg_chegada_to_saida
+            coalesce(avg(date_diff('second', try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_chegada} as timestamp)) / 3600.0), 2.0) as avg_cheguei_to_chegada,
+            coalesce(avg(date_diff('second', try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_peso_saida} as timestamp)) / 3600.0), 1.5) as avg_chegada_to_saida
           FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" base
           ${pracaFilter.join}
           WHERE base.${map.terminal} = '${terminal}'
@@ -32,7 +33,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             AND try_cast(${map.dt_peso_saida} as timestamp) >= date_add('day', -3, now())
       ),
       active_trucks AS (
-          -- Step 2: Get trucks currently in the terminal (Cheguei set, but Peso Saida is NULL)
+          -- Step 2: Get trucks currently in the terminal (Cheguei set, but Peso Saida is missing/empty)
           SELECT 
             ${map.id} as gmo_id,
             try_cast(${map.dt_emissao} as timestamp) as dt_emissao,
@@ -42,8 +43,8 @@ export async function GET(request: Request): Promise<NextResponse> {
           ${pracaFilter.join}
           WHERE base.${map.terminal} = '${terminal}'
             ${produtoFilter}
-            AND try_cast(${map.dt_cheguei} as timestamp) >= date_add('day', -7, now())
-            AND try_cast(${map.dt_peso_saida} as timestamp) IS NULL
+            AND try_cast(${map.dt_cheguei} as timestamp) >= date_add('day', -3, now())
+            AND (try_cast(${map.dt_peso_saida} as timestamp) IS NULL OR ${map.dt_peso_saida} = '')
       ),
       projections AS (
           -- Step 3: Project exit time and total cycle for each active truck
@@ -58,7 +59,8 @@ export async function GET(request: Request): Promise<NextResponse> {
               WHEN t.dt_chegada IS NULL THEN (date_diff('second', t.dt_emissao, now()) / 3600.0) + s.avg_cheguei_to_chegada + s.avg_chegada_to_saida
               ELSE (date_diff('second', t.dt_emissao, now()) / 3600.0) + s.avg_chegada_to_saida
             END as projected_cycle_h
-          FROM active_trucks t, stage_averages s
+          FROM active_trucks t
+          CROSS JOIN stage_averages s
       )
       -- Step 4: Group results by expected exit hour
       SELECT 
