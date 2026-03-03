@@ -69,7 +69,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
       FROM calc c
       ${pracaFilterMain.join}
-      WHERE c.peso_saida > date_add('day', -1, now()) 
+      WHERE c.peso_saida > date_add('day', -1, date_add('hour', -4, now())) 
         ${produtoFilterCalc}
     `;
 
@@ -91,9 +91,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             WHERE base.${mapMeta.terminal} = '${terminal}'
               ${produtoFilterRaw.replace(map.produto, `base.${mapMeta.produto}`)}
               AND (
-                  try_cast(${mapMeta.dt_cheguei} as timestamp) >= date_add('day', -7, now())
-                  OR 
-                  try_cast(${mapMeta.dt_peso_saida} as timestamp) >= date_add('day', -7, now())
+                   try_cast(${mapMeta.dt_cheguei} as timestamp) >= date_add('day', -7, date_add('hour', -4, now()))
+                  OR                   try_cast(${mapMeta.dt_peso_saida} as timestamp) >= date_add('day', -7, date_add('hour', -4, now()))
               )
         `;
 

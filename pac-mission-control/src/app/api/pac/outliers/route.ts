@@ -134,7 +134,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         c.peso_saida as dt_peso_saida
         
       FROM calc c
-      WHERE c.peso_saida > date_add('day', -1, now())
+      WHERE c.peso_saida > date_add('day', -1, date_add('hour', -4, now()))
       AND c.ciclo_total_h > ${minThreshold} 
       ORDER BY total_val_h ${sortDir}
       LIMIT 25
