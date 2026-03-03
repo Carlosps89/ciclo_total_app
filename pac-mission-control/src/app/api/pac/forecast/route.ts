@@ -49,6 +49,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${map.dt_chamada} as _col_chamada,
             ${map.dt_peso_saida} as _col_peso_saida,
             ${map.dt_agendamento} as _col_agendamento,
+            ${map.janela_agendamento || 'janela_agendamento'} as _col_janela,
             ${colSituacao} as _col_situacao,
             greatest(
                 coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
@@ -108,6 +109,11 @@ export async function GET(request: Request): Promise<NextResponse> {
             OR
             -- Or it is a future/recent appt
             (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -5, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
+          )
+          AND (
+            status_operacional != 'Programado'
+            OR try_cast(_col_janela as timestamp) >= date_add('hour', -24, date_add('hour', -4, now()))
+          )
       ),
       benchmarks AS (
           SELECT 'Fila Externa' as status_operacional, 2.0 as avg_hist_h
@@ -209,6 +215,16 @@ export async function GET(request: Request): Promise<NextResponse> {
           OR
           -- Or it is a future/recent appt
           (ts_last_event = timestamp '1900-01-01' AND try_cast(ag as timestamp) >= date_add('day', -5, now()) AND try_cast(ag as timestamp) <= date_add('day', 3, now()))
+        )
+        AND (
+          (CASE 
+            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 'Operação Terminal'
+            WHEN try_cast(cda as timestamp) IS NOT NULL THEN 'Trânsito Externo'
+            WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'Fila Externa'
+            ELSE 'Programado'
+          END) != 'Programado'
+          OR try_cast(jan as timestamp) >= date_add('hour', -24, date_add('hour', -4, now()))
+        )
         LIMIT 1000
       `)
     ]);
