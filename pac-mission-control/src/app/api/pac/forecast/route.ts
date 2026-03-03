@@ -130,7 +130,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     console.log(`[Forecast-Debug] rawCols:`, JSON.stringify(rawCols));
     console.log(`[Forecast-Debug] Mapped Columns:`, JSON.stringify(map));
 
-    const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
+    const [summaryResults, vehiclesResults, diagRes]: [ResultSet | undefined, ResultSet | undefined, ResultSet | undefined] = await Promise.all([
       runQuery(summaryQuery),
       runQuery(`
         ${pracaFilter.cte}
@@ -183,8 +183,29 @@ export async function GET(request: Request): Promise<NextResponse> {
             (em is not null AND try_cast(em as timestamp) >= date_add('day', -120, now()))
           )
         LIMIT 1000
+      `),
+      runQuery(`
+        SELECT 
+          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}') as total_terminal,
+          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' ${movementFilter}) as total_movement,
+          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' AND try_cast(${map.dt_cheguei} as timestamp) IS NOT NULL) as valid_dates,
+          ${map.dt_cheguei}, movimento, situacao_descricao
+        FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" 
+        WHERE ${map.terminal} = '${terminal}'
+        LIMIT 5
       `)
     ]);
+
+    if (diagRes?.Rows) {
+      const counts = diagRes.Rows[1]?.Data || [];
+      console.log(`[Forecast-Diag] Terminal Count: ${counts[0]?.VarCharValue}`);
+      console.log(`[Forecast-Diag] Movement Filter Count: ${counts[1]?.VarCharValue}`);
+      console.log(`[Forecast-Diag] Rows with valid try_cast(cheguei): ${counts[2]?.VarCharValue}`);
+      console.log(`[Forecast-Diag] Sample RAW Data:`);
+      diagRes.Rows.slice(1).forEach(r => {
+        console.log(`-> ${r.Data?.map(d => d.VarCharValue).join(' | ')}`);
+      });
+    }
 
     const summary = summaryResults?.Rows?.slice(1).map((r) => {
       const data = r.Data || [];
