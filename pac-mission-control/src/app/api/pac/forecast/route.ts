@@ -56,7 +56,9 @@ export async function GET(request: Request): Promise<NextResponse> {
                 coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
                 coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
                 coalesce(try_cast(${map.dt_chamada} as timestamp), timestamp '1900-01-01 00:00:00'),
-                coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00')
+                coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00'),
+                coalesce(try_cast(${map.dt_agendamento} as timestamp), timestamp '1900-01-01 00:00:00'),
+                coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
             ) as ts_ult
           FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
           ${pracaFilter.join}
@@ -88,11 +90,13 @@ export async function GET(request: Request): Promise<NextResponse> {
           FROM dedupped
           WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
             AND (
-              (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -30, now()))
+              (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -120, now()))
               OR 
-              (_col_agendamento is not null AND try_cast(_col_agendamento as timestamp) >= date_trunc('day', now()))
+              (_col_agendamento is not null AND try_cast(_col_agendamento as timestamp) >= date_add('day', -120, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
               OR
-              (_col_chegada is not null AND try_cast(_col_chegada as timestamp) >= date_add('day', -30, now()))
+              (_col_chegada is not null AND try_cast(_col_chegada as timestamp) >= date_add('day', -120, now()))
+              OR
+              (_col_emissao is not null AND try_cast(_col_emissao as timestamp) >= date_add('day', -120, now()))
             )
       ),
       benchmarks AS (
@@ -146,7 +150,9 @@ export async function GET(request: Request): Promise<NextResponse> {
               coalesce(try_cast(ps as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00')
+              coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(ag as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
             ) DESC) as rn FROM raw_data
           ) WHERE rn = 1
         )
@@ -167,11 +173,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         FROM dedup
         WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
           AND (
-            (ch is not null AND try_cast(ch as timestamp) >= date_add('day', -30, now()))
+            (ch is not null AND try_cast(ch as timestamp) >= date_add('day', -120, now()))
             OR 
-            (ag is not null AND try_cast(ag as timestamp) >= date_trunc('day', now()))
+            (ag is not null AND try_cast(ag as timestamp) >= date_add('day', -120, now()) AND try_cast(ag as timestamp) <= date_add('day', 3, now()))
             OR
-            (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -30, now()))
+            (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -120, now()))
+            OR
+            (try_cast(${map.dt_emissao} as timestamp) is not null AND try_cast(${map.dt_emissao} as timestamp) >= date_add('day', -120, now()))
           )
         LIMIT 1000
       `)
