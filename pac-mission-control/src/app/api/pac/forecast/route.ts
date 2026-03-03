@@ -91,7 +91,8 @@ export async function GET(request: Request): Promise<NextResponse> {
               WHEN _col_cheguei IS NOT NULL THEN 'Fila Externa'
               ELSE 'Programado'
             END as status_operacional,
-            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_status_h
+            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_status_h,
+            date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_acumulado_h
           FROM active
           WHERE 
             -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
@@ -113,7 +114,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         max(b.avg_hist_h) as avg_hist_h,
         approx_percentile(c.tempo_status_h, 0.1) as p10,
         approx_percentile(c.tempo_status_h, 0.25) as p25,
-        approx_percentile(c.tempo_status_h, 0.75) as p75
+        approx_percentile(c.tempo_status_h, 0.75) as p75,
+        avg(c.tempo_acumulado_h) as avg_acumulado_h,
+        approx_percentile(c.tempo_acumulado_h, 0.75) as p75_acumulado
       FROM categorized c
       LEFT JOIN benchmarks b ON b.status_operacional = c.status_operacional
       GROUP BY 1
@@ -176,6 +179,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ELSE 'Programado'
           END as status,
           date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas,
+          date_diff('second', coalesce(try_cast(em as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas_acumuladas,
           cast(em as varchar) as dt_emissao,
           cast(ag as varchar) as dt_agendamento,
           cast(ch as varchar) as dt_cheguei,
@@ -201,7 +205,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         avg_hist_h: parseFloat(data[3]?.VarCharValue || '0'),
         p10: parseFloat(data[4]?.VarCharValue || '0'),
         p25: parseFloat(data[5]?.VarCharValue || '0'),
-        p75: parseFloat(data[6]?.VarCharValue || '0')
+        p75: parseFloat(data[6]?.VarCharValue || '0'),
+        avg_acumulado_h: parseFloat(data[7]?.VarCharValue || '0'),
+        p75_acumulado: parseFloat(data[8]?.VarCharValue || '0')
       };
     }) || [];
 
@@ -213,12 +219,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         origem: data[2]?.VarCharValue || '',
         status: data[3]?.VarCharValue || '',
         horas: parseFloat(data[4]?.VarCharValue || '0'),
+        horas_acumuladas: parseFloat(data[5]?.VarCharValue || '0'),
         timestamps: {
-            emissao: data[5]?.VarCharValue,
-            agendamento: data[6]?.VarCharValue,
-            cheguei: data[7]?.VarCharValue,
-            chamada: data[8]?.VarCharValue,
-            chegada: data[9]?.VarCharValue
+            emissao: data[6]?.VarCharValue,
+            agendamento: data[7]?.VarCharValue,
+            cheguei: data[8]?.VarCharValue,
+            chamada: data[9]?.VarCharValue,
+            chegada: data[10]?.VarCharValue
         }
       };
     }) || [];

@@ -10,6 +10,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  TooltipItem
 } from 'chart.js';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
@@ -32,6 +33,8 @@ interface QueueSummary {
   p10: number;
   p25: number;
   p75: number;
+  avg_acumulado_h: number;
+  p75_acumulado: number;
 }
 
 interface Vehicle {
@@ -40,6 +43,7 @@ interface Vehicle {
   origem: string;
   status: string;
   horas: number;
+  horas_acumuladas: number;
   timestamps: {
     emissao?: string;
     agendamento?: string;
@@ -57,10 +61,10 @@ const STAGE_COLORS: Record<string, string> = {
 };
 
 const STAGE_ICONS: Record<string, React.ReactNode> = {
-  'Operação Terminal': <Activity size={16} className="text-emerald-500" />,
-  'Trânsito Externo': <Truck size={16} className="text-sky-500" />,
-  'Fila Externa': <Clock size={16} className="text-amber-500" />,
-  'Programado': <MapPin size={16} className="text-slate-500" />
+  'Operação Terminal': <Activity size={14} className="text-emerald-500" />,
+  'Trânsito Externo': <Truck size={14} className="text-sky-500" />,
+  'Fila Externa': <Clock size={14} className="text-amber-500" />,
+  'Programado': <MapPin size={14} className="text-slate-500" />
 };
 
 function VehicleTimeline({ vehicle }: { vehicle: Vehicle }) {
@@ -130,7 +134,7 @@ function DrillDownModal({
             onClick={onClose}
             className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400"
           >
-            <Search className="rotate-45" size={24} />
+            <Activity className="rotate-45" size={24} />
           </button>
         </div>
 
@@ -166,12 +170,16 @@ function DrillDownModal({
                   <div className="flex items-center gap-4">
                     <div className="text-lg font-bold text-white tracking-wider">{v.placa}</div>
                     <div className="text-[10px] text-slate-500 font-mono bg-white/5 px-2 py-0.5 rounded">ID: {v.id}</div>
+                    <div className="flex flex-col">
+                        <div className="text-[10px] text-slate-500 font-bold uppercase">Ciclo Acumulada</div>
+                        <div className="text-xs text-emerald-400 font-bold">{v.horas_acumuladas.toFixed(1)}h</div>
+                    </div>
                     <div className="text-xs text-slate-400 truncate max-w-[200px]">{v.origem}</div>
                   </div>
                   <div className="flex items-center gap-4 font-mono">
                     <div className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
-                      <span className="text-xs font-bold text-blue-400">{v.horas.toFixed(1)}h</span>
+                      <span className="text-xs font-bold text-blue-400">{v.horas.toFixed(1)}h na etapa</span>
                     </div>
                     <Activity size={14} className={`transition-transform ${expandedVehicle === v.id ? 'rotate-180' : ''}`} />
                   </div>
@@ -245,22 +253,22 @@ function ForecastContent() {
       legend: { display: false },
       tooltip: {
         backgroundColor: 'rgba(2, 19, 43, 0.95)',
-        titleFont: { size: 16, weight: 'bold' as const },
-        bodyFont: { size: 14 },
-        padding: 16,
+        titleFont: { size: 14, weight: 'bold' as const },
+        bodyFont: { size: 12 },
+        padding: 12,
         borderColor: 'rgba(255,255,255,0.1)',
         borderWidth: 1,
         callbacks: {
-          label: (item: { raw: number }) => `Volume: ${item.raw} veículos`,
-          afterBody: (context: { dataIndex: number }[]) => {
+          label: (item: TooltipItem<'bar'>) => `Volume: ${item.raw as number} veículos`,
+          afterBody: (context: TooltipItem<'bar'>[]) => {
             const item = summary[context[0].dataIndex];
             return [
               '',
-              `Média: ${item.avg_atual_h.toFixed(1)}h`,
-              `Meta: ${item.avg_hist_h.toFixed(1)}h`,
-              `P10: ${item.p10.toFixed(1)}h`,
-              `P25: ${item.p25.toFixed(1)}h`,
-              `P75: ${item.p75.toFixed(1)}h`,
+              `MÉDIA NA ETAPA: ${item.avg_atual_h.toFixed(1)}h`,
+              `P75 ETAPA: ${item.p75.toFixed(1)}h`,
+              '----------------',
+              `CICLO ACUMULADO MÉDIO: ${item.avg_acumulado_h.toFixed(1)}h`,
+              `P75 ACUMULADO: ${item.p75_acumulado.toFixed(1)}h`,
             ];
           }
         }
@@ -270,11 +278,11 @@ function ForecastContent() {
       y: { 
         beginAtZero: true, 
         grid: { color: 'rgba(255,255,255,0.03)' }, 
-        ticks: { color: '#94a3b8', font: { size: 12 } } 
+        ticks: { color: '#94a3b8', font: { size: 10 } } 
       },
       x: { 
         grid: { display: false }, 
-        ticks: { color: '#f8fafc', font: { size: 14, weight: 'bold' as const } } 
+        ticks: { color: '#f8fafc', font: { size: 12, weight: 'bold' as const } } 
       }
     }
   };
@@ -283,8 +291,8 @@ function ForecastContent() {
     return (
       <div className="min-h-screen bg-[#010b1a] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500"></div>
-          <span className="text-slate-500 font-mono tracking-widest animate-pulse uppercase text-[10px]">Carregando Fila...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div>
+          <span className="text-slate-500 font-mono tracking-widest animate-pulse uppercase text-[8px]">Carregando Fila...</span>
         </div>
       </div>
     );
@@ -298,92 +306,88 @@ function ForecastContent() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
 
-      <div className="flex-1 flex flex-col p-6 max-w-[1920px] mx-auto w-full">
-        {/* Header - Compact for TV */}
-        <div className="flex justify-between items-end mb-8 border-b border-white/5 pb-4">
-          <div>
-            <h1 className="text-4xl font-black bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-4">
-              <button 
-                onClick={() => window.location.href = `/?terminal=${terminal}`}
-                className="p-3 hover:bg-white/10 rounded-2xl transition-all text-slate-400 border border-white/5 hover:border-white/20"
-              >
-                <ArrowLeft size={24} />
-              </button>
-              <Activity className="text-emerald-400" size={32} />
+      <div className="flex-1 flex flex-col p-4 max-w-[1920px] mx-auto w-full">
+        {/* Header - More compact */}
+        <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => window.location.href = `/?terminal=${terminal}`}
+              className="p-2 hover:bg-white/10 rounded-xl transition-all text-slate-400 border border-white/5"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <h1 className="text-2xl font-black bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
+              <Activity className="text-emerald-400" size={24} />
               FORECAST DE OPERAÇÕES
-              <span className="text-sm font-light text-slate-500 tracking-[0.3em] ml-2">TERMINAL {terminal}</span>
+              <span className="text-xs font-light text-slate-500 tracking-[0.2em] ml-2 uppercase">Terminal {terminal}</span>
             </h1>
           </div>
-          <div className="flex items-center gap-8">
-            <div className="text-right">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Última Atualização</div>
-                <div className="text-lg font-mono text-emerald-400/80">{new Date().toLocaleTimeString('pt-BR')}</div>
-            </div>
+          <div className="text-right">
+              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Última Atualização</div>
+              <div className="text-sm font-mono text-emerald-400/80">{new Date().toLocaleTimeString('pt-BR')}</div>
           </div>
         </div>
 
         {/* Main Dashboard Layout */}
-        <div className="flex-1 grid grid-cols-12 gap-6">
-          {/* Summary Column */}
-          <div className="col-span-3 flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-2">
+        <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+          {/* Summary Column - Made more compact */}
+          <div className="col-span-3 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1">
             {summary.map((item) => (
               <div 
                 key={item.status}
                 onClick={() => setSelectedStatus(item.status)}
-                className="group p-6 rounded-3xl bg-[#02132b] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/[0.02] transition-all cursor-pointer relative overflow-hidden"
+                className="group p-4 rounded-2xl bg-[#02132b] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/[0.01] transition-all cursor-pointer relative overflow-hidden"
               >
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity">
                     {STAGE_ICONS[item.status]}
                 </div>
-                <div className="flex flex-col gap-1 mb-4">
-                  <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">{item.status}</span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold tracking-tight">{item.volume}</span>
-                    <span className="text-slate-500 text-xs font-light lowercase">veículos</span>
+                <div className="flex flex-col gap-0.5 mb-2">
+                  <span className="text-slate-500 text-[8px] font-black uppercase tracking-widest">{item.status}</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-3xl font-bold tracking-tight">{item.volume}</span>
+                    <span className="text-slate-500 text-[10px] font-light lowercase">veículos</span>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-2 gap-4 mt-auto pt-4 border-t border-white/5">
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
                   <div className="flex flex-col">
-                    <span className="text-[9px] text-slate-500 uppercase font-bold">Média Atual</span>
-                    <span className={`text-xl font-mono ${item.avg_atual_h > item.avg_hist_h ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    <span className="text-[7px] text-slate-500 uppercase font-bold">Média Etapa</span>
+                    <span className={`text-md font-mono ${item.avg_atual_h > item.avg_hist_h ? 'text-rose-400' : 'text-blue-400'}`}>
                       {item.avg_atual_h.toFixed(1)}h
                     </span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] text-slate-500 uppercase font-bold">P75 (Retardo)</span>
-                    <span className="text-xl font-mono text-slate-300">
-                      {item.p75.toFixed(1)}h
+                    <span className="text-[7px] text-slate-500 uppercase font-bold">Ciclo Acumulada</span>
+                    <span className="text-md font-mono text-emerald-400 font-bold">
+                      {item.avg_acumulado_h.toFixed(1)}h
                     </span>
                   </div>
+                </div>
+
+                <div className="mt-2 flex justify-between items-center text-[7px] uppercase tracking-tighter text-slate-500 font-bold">
+                    <span>P75 Etapa: {item.p75.toFixed(1)}h</span>
+                    <span>P75 Acumulado: {item.p75_acumulado.toFixed(1)}h</span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Chart Area */}
-          <div className="col-span-9 bg-[#02132b] rounded-3xl border border-white/5 p-8 flex flex-col relative">
-            <div className="absolute top-8 right-8 flex gap-4">
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tempo Real</span>
-                </div>
-            </div>
-
-            <h3 className="text-slate-500 text-xs font-black uppercase mb-8 flex items-center gap-3 tracking-widest">
-              <Activity size={18} className="text-blue-400" /> Distribuição da Fila por Etapa Operacional
+          {/* Chart Area - Larger proportion */}
+          <div className="col-span-9 bg-[#02132b] rounded-2xl border border-white/5 p-6 flex flex-col relative min-h-0">
+            <h3 className="text-slate-500 text-[10px] font-black uppercase mb-4 flex items-center gap-2 tracking-widest">
+              <Activity size={14} className="text-blue-400" /> Distribuição da Fila por Etapa Operacional
             </h3>
             
-            <div className="flex-1 w-full relative">
+            <div className="flex-1 w-full relative min-h-0">
               <Bar data={chartData} options={chartOptions} />
             </div>
 
             {/* TV Legend */}
-            <div className="mt-8 flex justify-center gap-12">
+            <div className="mt-4 flex justify-center gap-8">
                {Object.entries(STAGE_COLORS).map(([name, color]) => (
-                 <div key={name} className="flex items-center gap-3 group translate-y-0 hover:-translate-y-1 transition-transform">
-                    <div className="w-4 h-4 rounded-lg shadow-lg shadow-black/20" style={{ backgroundColor: color }}></div>
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">{name}</span>
+                 <div key={name} className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }}></div>
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">{name}</span>
                  </div>
                ))}
             </div>
@@ -405,7 +409,7 @@ function ForecastContent() {
 
 export default function ForecastPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center font-mono text-slate-500 text-[10px] tracking-widest">INIT_FORECAST...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center font-mono text-slate-500 text-[8px] tracking-widest lowercase">initializing_forecast...</div>}>
       <ForecastContent />
     </Suspense>
   );
