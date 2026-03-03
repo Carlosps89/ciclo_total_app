@@ -125,7 +125,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     console.log(`[Forecast-Debug] Final Summary Query:`, summaryQuery);
 
-    const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
+    console.log(`[Forecast-Debug] rawCols:`, JSON.stringify(rawCols));
+    console.log(`[Forecast-Debug] Mapped Columns:`, JSON.stringify(map));
+
+    const [summaryResults, vehiclesResults, rawCountRes]: [ResultSet | undefined, ResultSet | undefined, ResultSet | undefined] = await Promise.all([
       runQuery(summaryQuery),
       runQuery(`
         ${pracaFilter.cte}
@@ -173,8 +176,12 @@ export async function GET(request: Request): Promise<NextResponse> {
             (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -30, now()))
           )
         LIMIT 1000
-      `)
+      `),
+      runQuery(`SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}'`)
     ]);
+
+    const rawCount = rawCountRes?.Rows?.[1]?.Data?.[0]?.VarCharValue || '0';
+    console.log(`[Forecast-Debug] Raw count for terminal ${terminal}: ${rawCount}`);
 
     const summary = summaryResults?.Rows?.slice(1).map((r) => {
       const data = r.Data || [];
