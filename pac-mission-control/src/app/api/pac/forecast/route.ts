@@ -114,36 +114,51 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${pracaFilter.join}
             WHERE base.${map.terminal} = '${terminal}' ${produtoFilter}
         ),
-        dedup AS (SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY id ORDER BY coalesce(ps, cga, cda, ch, ag) DESC) as rn FROM raw_data) WHERE rn = 1)
+        dedup AS (
+          SELECT * FROM (
+            SELECT *, row_number() OVER (PARTITION BY id ORDER BY greatest(
+              coalesce(try_cast(ps as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00')
+            ) DESC) as rn FROM raw_data
+          ) WHERE rn = 1
+        )
         SELECT 
           id, placa, origem,
           CASE 
-            WHEN cga IS NOT NULL THEN 'Em Operação'
-            WHEN cda IS NOT NULL THEN 'Em Trânsito Interno'
-            WHEN ch IS NOT NULL THEN 'No Pátio'
+            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 'Em Operação'
+            WHEN try_cast(cda as timestamp) IS NOT NULL THEN 'Em Trânsito Interno'
+            WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'No Pátio'
             ELSE 'Programado'
           END as status,
           date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas
         FROM dedup
-        WHERE ps IS NULL OR ps = ''
+        WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
         LIMIT 1000
       `)
     ]);
 
-    const summary = summaryResults?.Rows?.slice(1).map((r: any) => ({
-      status: r.Data[0].VarCharValue,
-      avg_atual_h: parseFloat(r.Data[1].VarCharValue || '0'),
-      volume: parseInt(r.Data[2].VarCharValue || '0'),
-      avg_hist_h: parseFloat(r.Data[3].VarCharValue || '0')
-    })) || [];
+    const summary = summaryResults?.Rows?.slice(1).map((r) => {
+      const data = r.Data || [];
+      return {
+        status: data[0]?.VarCharValue || '',
+        avg_atual_h: parseFloat(data[1]?.VarCharValue || '0'),
+        volume: parseInt(data[2]?.VarCharValue || '0'),
+        avg_hist_h: parseFloat(data[3]?.VarCharValue || '0')
+      };
+    }) || [];
 
-    const vehicles = vehiclesResults?.Rows?.slice(1).map((r: any) => ({
-      id: r.Data[0].VarCharValue,
-      placa: r.Data[1].VarCharValue,
-      origem: r.Data[2].VarCharValue,
-      status: r.Data[3].VarCharValue,
-      horas: parseFloat(r.Data[4].VarCharValue || '0')
-    })) || [];
+    const vehicles = vehiclesResults?.Rows?.slice(1).map((r) => {
+      const data = r.Data || [];
+      return {
+        id: data[0]?.VarCharValue || '',
+        placa: data[1]?.VarCharValue || '',
+        origem: data[2]?.VarCharValue || '',
+        status: data[3]?.VarCharValue || '',
+        horas: parseFloat(data[4]?.VarCharValue || '0')
+      };
+    }) || [];
 
     return NextResponse.json({
       terminal,

@@ -95,7 +95,7 @@ function ForecastContent() {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    onClick: (_: any, elements: any[]) => {
+    onClick: (_: unknown, elements: { index: number }[]) => {
       if (elements.length > 0) {
         const index = elements[0].index;
         const status = summary[index].status;
@@ -106,7 +106,7 @@ function ForecastContent() {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          afterBody: (context: any) => {
+          afterBody: (context: { dataIndex: number }[]) => {
             const item = summary[context[0].dataIndex];
             return `Média Atual: ${item.avg_atual_h.toFixed(1)}h\nMeta Histórica: ${item.avg_hist_h.toFixed(1)}h`;
           }
