@@ -90,8 +90,8 @@ export async function GET(request: Request): Promise<NextResponse> {
               WHEN _col_cheguei IS NOT NULL THEN 'Fila Externa'
               ELSE 'Programado'
             END as status_operacional,
-            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_status_h,
-            date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_acumulado_h
+            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), date_add('hour', -4, now())) / 3600.0 as tempo_status_h,
+            date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)), date_add('hour', -4, now())) / 3600.0 as tempo_acumulado_h
           FROM active
           WHERE 
             -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
@@ -176,8 +176,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'Fila Externa'
             ELSE 'Programado'
           END as status,
-          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas,
-          date_diff('second', coalesce(try_cast(em as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas_acumuladas,
+          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), date_add('hour', -4, now())) / 3600.0 as horas,
+          date_diff('second', coalesce(try_cast(em as timestamp), try_cast(ag as timestamp)), date_add('hour', -4, now())) / 3600.0 as horas_acumuladas,
           cast(em as varchar) as dt_emissao,
           cast(ag as varchar) as dt_agendamento,
           cast(ch as varchar) as dt_cheguei,
