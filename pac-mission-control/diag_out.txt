@@ -1,0 +1,52 @@
+!!! [Athena] ERRO DE EXECUÇÃO !!!
+Query: SELECT MOVIMENTO, DS_SITUACAO, count(*) as cnt 
+                 FROM "db_gmo_trusted"."vw_ciclo_v2" 
+                 WHERE terminal = 'TRO' 
+                 GROUP BY 1, 2 
+                 ORDER BY...
+Error Detail: AccessDeniedException: You are not authorized to perform: athena:StartQueryExecution on the resource. After your AWS administrator or you have updated your permissions, please try again.
+    at ProtocolLib.getErrorSchemaOrThrowBaseException (/Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:69:67)
+    at AwsJson1_1Protocol.handleError (/Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:769:65)
+    at AwsJson1_1Protocol.deserializeResponse (/Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:481:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:26:24
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/core/dist-cjs/index.js:121:20
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/middleware-retry/dist-cjs/index.js:254:46
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+    at async runQuery (/Users/carlospereira/ciclo_total_app/pac-mission-control/src/lib/athena.ts:30:38)
+    at async main (/Users/carlospereira/ciclo_total_app/pac-mission-control/diag_debug.ts:9:15) {
+  '$fault': 'client',
+  '$retryable': undefined,
+  '$metadata': {
+    httpStatusCode: 400,
+    requestId: '13496bac-0dad-4702-aa72-35189dfc9c2b',
+    extendedRequestId: undefined,
+    cfId: undefined,
+    attempts: 1,
+    totalRetryDelay: 0
+  },
+  __type: 'AccessDeniedException'
+}
+AccessDeniedException: You are not authorized to perform: athena:StartQueryExecution on the resource. After your AWS administrator or you have updated your permissions, please try again.
+    at ProtocolLib.getErrorSchemaOrThrowBaseException (/Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:69:67)
+    at AwsJson1_1Protocol.handleError (/Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@aws-sdk/core/dist-cjs/submodules/protocols/index.js:769:65)
+    at AwsJson1_1Protocol.deserializeResponse (/Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:481:24)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/core/dist-cjs/submodules/schema/index.js:26:24
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/core/dist-cjs/index.js:121:20
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@smithy/middleware-retry/dist-cjs/index.js:254:46
+    at async /Users/carlospereira/ciclo_total_app/pac-mission-control/node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:5:26
+    at async runQuery (/Users/carlospereira/ciclo_total_app/pac-mission-control/src/lib/athena.ts:30:38)
+    at async main (/Users/carlospereira/ciclo_total_app/pac-mission-control/diag_debug.ts:9:15) {
+  '$fault': 'client',
+  '$retryable': undefined,
+  '$metadata': {
+    httpStatusCode: 400,
+    requestId: '13496bac-0dad-4702-aa72-35189dfc9c2b',
+    extendedRequestId: undefined,
+    cfId: undefined,
+    attempts: 1,
+    totalRetryDelay: 0
+  },
+  __type: 'AccessDeniedException'
+}

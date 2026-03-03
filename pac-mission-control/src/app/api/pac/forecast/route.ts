@@ -27,7 +27,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
     
     // User requested focus on DESCARGA
-    let movementFilter = '';
+    const movementFilter = '';
+    /* 
     if (colMovimento && colOperacao) {
       movementFilter = `AND (base.${colMovimento} = 'DESCARGA' OR base.${colOperacao} = 'DESCARGA')`;
     } else if (colMovimento) {
@@ -35,6 +36,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     } else if (colOperacao) {
       movementFilter = `AND base.${colOperacao} = 'DESCARGA'`;
     }
+    */
+    console.log(`[Forecast-Debug] Filters: Movement=${movementFilter} Terminal=${terminal} Producto=${produto}`);
 
     const summaryQuery: string = `
       ${pracaFilter.cte}
@@ -85,11 +88,11 @@ export async function GET(request: Request): Promise<NextResponse> {
           FROM dedupped
           WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
             AND (
-              (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -3, now()))
+              (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -30, now()))
               OR 
               (_col_agendamento is not null AND try_cast(_col_agendamento as timestamp) >= date_trunc('day', now()))
               OR
-              (_col_chegada is not null AND try_cast(_col_chegada as timestamp) >= date_add('day', -1, now()))
+              (_col_chegada is not null AND try_cast(_col_chegada as timestamp) >= date_add('day', -30, now()))
             )
       ),
       benchmarks AS (
@@ -158,6 +161,13 @@ export async function GET(request: Request): Promise<NextResponse> {
           date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas
         FROM dedup
         WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
+          AND (
+            (ch is not null AND try_cast(ch as timestamp) >= date_add('day', -30, now()))
+            OR 
+            (ag is not null AND try_cast(ag as timestamp) >= date_trunc('day', now()))
+            OR
+            (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -30, now()))
+          )
         LIMIT 1000
       `)
     ]);
@@ -182,6 +192,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         horas: parseFloat(data[4]?.VarCharValue || '0')
       };
     }) || [];
+
+    console.log(`[Forecast-Debug] Final Results: SummaryCount=${summary.length} VehiclesCount=${vehicles.length}`);
 
     return NextResponse.json({
       terminal,
