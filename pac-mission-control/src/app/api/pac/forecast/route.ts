@@ -70,6 +70,15 @@ export async function GET(request: Request): Promise<NextResponse> {
               FROM raw_data
           ) WHERE rn = 1
       ),
+      canceled_ids AS (
+          SELECT distinct ${map.id} as cid
+          FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}"
+          WHERE (
+            upper(coalesce(${colSituacao}, '')) LIKE '%CANCEL%' OR 
+            upper(coalesce(${map.evento || 'evento_descricao'}, '')) LIKE '%CANCEL%'
+          )
+          AND ${map.terminal} = '${terminal}'
+      ),
       active AS (
           SELECT *,
              greatest(
@@ -79,7 +88,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ) as ts_last_event
           FROM dedupped
           WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            AND upper(coalesce(_col_situacao, '')) NOT LIKE '%CANCEL%'
+            AND _col_id NOT IN (SELECT cid FROM canceled_ids)
       ),
       categorized AS (
           SELECT 
@@ -157,6 +166,15 @@ export async function GET(request: Request): Promise<NextResponse> {
             ) DESC) as rn FROM raw_data
           ) WHERE rn = 1
         ),
+        canceled_ids AS (
+           SELECT distinct ${map.id} as cid
+           FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}"
+           WHERE (
+             upper(coalesce(${colSituacao}, '')) LIKE '%CANCEL%' OR 
+             upper(coalesce(${map.evento || 'evento_descricao'}, '')) LIKE '%CANCEL%'
+           )
+           AND ${map.terminal} = '${terminal}'
+        ),
         active AS (
           SELECT *,
              greatest(
@@ -166,7 +184,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ) as ts_last_event
           FROM dedup
           WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
-            AND upper(coalesce(sit, '')) NOT LIKE '%CANCEL%'
+            AND id NOT IN (SELECT cid FROM canceled_ids)
         )
         SELECT 
           id, placa, origem,
