@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
@@ -11,7 +11,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const produto: string | null = searchParams.get('produto');
     const praca: string | null = searchParams.get('praca');
 
-    const TARGET_VIEW: string = 'VW_Ciclo';
+    const TARGET_VIEW: string = ATHENA_VIEW;
 
     const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
       .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
@@ -19,15 +19,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     const map: Record<string, string> = getCleanMap(rawCols);
     
     // Additional dynamic mappings for movement and granular status
-    const colMovimento = rawCols.find(c => c.toUpperCase() === 'MOVIMENTO') || 'MOVIMENTO';
-    const colOperacao = rawCols.find(c => c.toUpperCase() === 'OPERACAO') || 'OPERACAO';
+    const colMovimento = rawCols.find(c => ['MOVIMENTO', 'DS_MOVIMENTO', 'TIPO_MOVIMENTO'].includes(c.toUpperCase()));
+    const colOperacao = rawCols.find(c => ['OPERACAO', 'DS_OPERACAO', 'TIPO_OPERACAO'].includes(c.toUpperCase()));
     const colSituacao = map.situacao || 'DS_SITUACAO';
 
     const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
     
     // User requested focus on DESCARGA
-    const movementFilter = `AND (base.${colMovimento} = 'DESCARGA' OR base.${colOperacao} = 'DESCARGA')`;
+    let movementFilter = '';
+    if (colMovimento && colOperacao) {
+      movementFilter = `AND (base.${colMovimento} = 'DESCARGA' OR base.${colOperacao} = 'DESCARGA')`;
+    } else if (colMovimento) {
+      movementFilter = `AND base.${colMovimento} = 'DESCARGA'`;
+    } else if (colOperacao) {
+      movementFilter = `AND base.${colOperacao} = 'DESCARGA'`;
+    }
 
     const summaryQuery: string = `
       ${pracaFilter.cte}

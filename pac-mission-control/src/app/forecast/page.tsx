@@ -13,7 +13,7 @@ import {
 } from 'chart.js';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { ArrowLeft, Clock, Truck, Play, MapPin, Search, Activity, CheckCircle, Scale } from 'lucide-react';
+import { ArrowLeft, Clock, Truck, MapPin, Search, Activity, CheckCircle, Scale } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -230,7 +230,7 @@ function ForecastContent() {
           </div>
 
           <div className="lg:col-span-2 bg-[#02132b] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/1">
               <h3 className="text-slate-400 text-sm font-bold uppercase flex items-center gap-2">
                 {selectedStatus ? `Veículos: ${selectedStatus}` : 'Todos os Veículos de Descarga'}
                 <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full text-[10px] lowercase font-normal">
