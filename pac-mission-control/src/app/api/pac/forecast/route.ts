@@ -11,7 +11,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const produto: string | null = searchParams.get('produto');
     const praca: string | null = searchParams.get('praca');
 
-    const TARGET_VIEW: string = ATHENA_VIEW;
+    const TARGET_VIEW: string = 'VW_Ciclo';
 
     const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
       .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
@@ -130,7 +130,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     console.log(`[Forecast-Debug] rawCols:`, JSON.stringify(rawCols));
     console.log(`[Forecast-Debug] Mapped Columns:`, JSON.stringify(map));
 
-    const [summaryResults, vehiclesResults, diagRes]: [ResultSet | undefined, ResultSet | undefined, ResultSet | undefined] = await Promise.all([
+    const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
       runQuery(summaryQuery),
       runQuery(`
         ${pracaFilter.cte}
@@ -183,32 +183,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             (em is not null AND try_cast(em as timestamp) >= date_add('day', -120, now()))
           )
         LIMIT 1000
-      `),
-      runQuery(`
-        SELECT 
-          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}') as total_terminal,
-          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' ${movementFilter.replace(/base\./g, '')}) as total_movement_exact,
-          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' AND (upper(movimento) LIKE '%DESCARGA%' OR upper(situacao_descricao) LIKE '%DESCARGA%')) as total_movement_like,
-          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' AND try_cast(${map.dt_cheguei} as timestamp) IS NOT NULL) as valid_dates,
-          ${map.dt_cheguei}, movimento, situacao_descricao, terminal
-        FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" 
-        WHERE ${map.terminal} = '${terminal}'
-        LIMIT 10
       `)
     ]);
-
-    if (diagRes?.Rows) {
-      const counts = diagRes.Rows[1]?.Data || [];
-      console.log(`[Forecast-Diag] Terminal Count: ${counts[0]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] Movement Exact: ${counts[1]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] Movement LIKE: ${counts[2]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] valid try_cast(cheguei): ${counts[3]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] Sample RAW Data (cheguei | movimento | situacao | term):`);
-      diagRes.Rows.slice(1).forEach(r => {
-        const d = r.Data || [];
-        console.log(`-> ${d.slice(4).map(v => v.VarCharValue).join(' | ')}`);
-      });
-    }
 
     const summary = summaryResults?.Rows?.slice(1).map((r) => {
       const data = r.Data || [];
