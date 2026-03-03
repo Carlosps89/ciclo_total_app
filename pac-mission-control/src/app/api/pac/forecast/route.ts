@@ -187,23 +187,26 @@ export async function GET(request: Request): Promise<NextResponse> {
       runQuery(`
         SELECT 
           (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}') as total_terminal,
-          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' ${movementFilter}) as total_movement,
+          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' ${movementFilter.replace(/base\./g, '')}) as total_movement_exact,
+          (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' AND (upper(movimento) LIKE '%DESCARGA%' OR upper(situacao_descricao) LIKE '%DESCARGA%')) as total_movement_like,
           (SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}' AND try_cast(${map.dt_cheguei} as timestamp) IS NOT NULL) as valid_dates,
-          ${map.dt_cheguei}, movimento, situacao_descricao
+          ${map.dt_cheguei}, movimento, situacao_descricao, terminal
         FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" 
         WHERE ${map.terminal} = '${terminal}'
-        LIMIT 5
+        LIMIT 10
       `)
     ]);
 
     if (diagRes?.Rows) {
       const counts = diagRes.Rows[1]?.Data || [];
       console.log(`[Forecast-Diag] Terminal Count: ${counts[0]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] Movement Filter Count: ${counts[1]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] Rows with valid try_cast(cheguei): ${counts[2]?.VarCharValue}`);
-      console.log(`[Forecast-Diag] Sample RAW Data:`);
+      console.log(`[Forecast-Diag] Movement Exact: ${counts[1]?.VarCharValue}`);
+      console.log(`[Forecast-Diag] Movement LIKE: ${counts[2]?.VarCharValue}`);
+      console.log(`[Forecast-Diag] valid try_cast(cheguei): ${counts[3]?.VarCharValue}`);
+      console.log(`[Forecast-Diag] Sample RAW Data (cheguei | movimento | situacao | term):`);
       diagRes.Rows.slice(1).forEach(r => {
-        console.log(`-> ${r.Data?.map(d => d.VarCharValue).join(' | ')}`);
+        const d = r.Data || [];
+        console.log(`-> ${d.slice(4).map(v => v.VarCharValue).join(' | ')}`);
       });
     }
 
