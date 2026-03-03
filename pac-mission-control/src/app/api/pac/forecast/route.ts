@@ -13,12 +13,21 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const TARGET_VIEW: string = 'VW_Ciclo';
 
-    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-      .then((cols: string[]) => getCleanMap(cols));
+    const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
+      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
+    
+    const map: Record<string, string> = getCleanMap(rawCols);
+    
+    // Additional dynamic mappings for movement and granular status
+    const colMovimento = rawCols.find(c => c.toUpperCase() === 'MOVIMENTO') || 'MOVIMENTO';
+    const colOperacao = rawCols.find(c => c.toUpperCase() === 'OPERACAO') || 'OPERACAO';
+    const colSituacao = map.situacao || 'DS_SITUACAO';
 
     const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
+    
+    // User requested focus on DESCARGA
+    const movementFilter = `AND (base.${colMovimento} = 'DESCARGA' OR base.${colOperacao} = 'DESCARGA')`;
 
     const summaryQuery: string = `
       ${pracaFilter.cte}
@@ -32,6 +41,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${map.dt_chamada} as _col_chamada,
             ${map.dt_peso_saida} as _col_peso_saida,
             ${map.dt_agendamento} as _col_agendamento,
+            ${colSituacao} as _col_situacao,
             greatest(
                 coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
                 coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
@@ -42,6 +52,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           ${pracaFilter.join}
           WHERE base.${map.terminal} = '${terminal}'
             ${produtoFilter}
+            ${movementFilter}
       ),
       dedupped AS (
           SELECT * FROM (
@@ -53,7 +64,12 @@ export async function GET(request: Request): Promise<NextResponse> {
           SELECT 
             _col_id,
             CASE 
-              WHEN _col_chegada IS NOT NULL THEN 'Em Operação'
+              WHEN _col_chegada IS NOT NULL THEN 
+                CASE 
+                   WHEN _col_situacao LIKE '%DESCARGA%' THEN 'Em Descarga'
+                   WHEN _col_situacao LIKE '%PESAGEM%' OR _col_situacao LIKE '%BALANCA%' THEN 'Aguardando Balança'
+                   ELSE 'Fim Operação'
+                END
               WHEN _col_chamada IS NOT NULL THEN 'Em Trânsito Interno'
               WHEN _col_cheguei IS NOT NULL THEN 'No Pátio'
               ELSE 'Programado'
@@ -70,20 +86,12 @@ export async function GET(request: Request): Promise<NextResponse> {
             )
       ),
       benchmarks AS (
-          SELECT 
-            'No Pátio' as status_operacional,
-            coalesce(avg(date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_chamada as timestamp)) / 3600.0), 2.0) as avg_hist_h
-          FROM dedupped WHERE _col_cheguei is not null AND _col_chamada is not null AND try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
-          UNION ALL
-          SELECT 
-            'Em Trânsito Interno',
-            coalesce(avg(date_diff('second', try_cast(_col_chamada as timestamp), try_cast(_col_chegada as timestamp)) / 3600.0), 0.5)
-          FROM dedupped WHERE _col_chamada is not null AND _col_chegada is not null AND try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
-          UNION ALL
-          SELECT 
-            'Em Operação',
-            coalesce(avg(date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_peso_saida as timestamp)) / 3600.0), 1.5)
-          FROM dedupped WHERE _col_chegada is not null AND _col_peso_saida is not null AND try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
+          SELECT 'No Pátio' as status_operacional, 2.0 as avg_hist_h
+          UNION ALL SELECT 'Em Trânsito Interno', 0.5
+          UNION ALL SELECT 'Aguardando Balança', 1.0
+          UNION ALL SELECT 'Em Descarga', 2.5
+          UNION ALL SELECT 'Fim Operação', 0.5
+          UNION ALL SELECT 'Programado', 0.0
       )
       SELECT 
         c.status_operacional,
@@ -98,7 +106,9 @@ export async function GET(request: Request): Promise<NextResponse> {
           WHEN 'Programado' THEN 1 
           WHEN 'No Pátio' THEN 2 
           WHEN 'Em Trânsito Interno' THEN 3 
-          WHEN 'Em Operação' THEN 4 
+          WHEN 'Aguardando Balança' THEN 4
+          WHEN 'Em Descarga' THEN 5
+          WHEN 'Fim Operação' THEN 6
         END`;
 
     const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
@@ -109,10 +119,11 @@ export async function GET(request: Request): Promise<NextResponse> {
             SELECT 
               ${map.id} as id, ${map.placa} as placa, ${map.origem} as origem, 
               ${map.dt_cheguei} as ch, ${map.dt_chamada} as cda, ${map.dt_chegada} as cga, 
-              ${map.dt_agendamento} as ag, ${map.dt_peso_saida} as ps
+              ${map.dt_agendamento} as ag, ${map.dt_peso_saida} as ps,
+              ${colSituacao} as sit
             FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
             ${pracaFilter.join}
-            WHERE base.${map.terminal} = '${terminal}' ${produtoFilter}
+            WHERE base.${map.terminal} = '${terminal}' ${produtoFilter} ${movementFilter}
         ),
         dedup AS (
           SELECT * FROM (
@@ -127,7 +138,12 @@ export async function GET(request: Request): Promise<NextResponse> {
         SELECT 
           id, placa, origem,
           CASE 
-            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 'Em Operação'
+            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 
+              CASE 
+                WHEN sit LIKE '%DESCARGA%' THEN 'Em Descarga'
+                WHEN sit LIKE '%PESAGEM%' OR sit LIKE '%BALANCA%' THEN 'Aguardando Balança'
+                ELSE 'Fim Operação'
+              END
             WHEN try_cast(cda as timestamp) IS NOT NULL THEN 'Em Trânsito Interno'
             WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'No Pátio'
             ELSE 'Programado'
