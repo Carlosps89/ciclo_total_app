@@ -131,6 +131,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         approx_percentile(c.tempo_status_h, 0.25) as p25,
         approx_percentile(c.tempo_status_h, 0.75) as p75,
         avg(c.tempo_acumulado_h) as avg_acumulado_h,
+        approx_percentile(c.tempo_acumulado_h, 0.1) as p10_acumulado,
+        approx_percentile(c.tempo_acumulado_h, 0.25) as p25_acumulado,
         approx_percentile(c.tempo_acumulado_h, 0.75) as p75_acumulado
       FROM categorized c
       LEFT JOIN benchmarks b ON b.status_operacional = c.status_operacional
@@ -237,7 +239,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         p25: parseFloat(data[5]?.VarCharValue || '0'),
         p75: parseFloat(data[6]?.VarCharValue || '0'),
         avg_acumulado_h: parseFloat(data[7]?.VarCharValue || '0'),
-        p75_acumulado: parseFloat(data[8]?.VarCharValue || '0')
+        p10_acumulado: parseFloat(data[8]?.VarCharValue || '0'),
+        p25_acumulado: parseFloat(data[9]?.VarCharValue || '0'),
+        p75_acumulado: parseFloat(data[10]?.VarCharValue || '0')
       };
     }) || [];
 

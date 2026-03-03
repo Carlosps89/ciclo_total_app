@@ -34,6 +34,8 @@ interface QueueSummary {
   p25: number;
   p75: number;
   avg_acumulado_h: number;
+  p10_acumulado: number;
+  p25_acumulado: number;
   p75_acumulado: number;
 }
 
@@ -54,6 +56,8 @@ interface Vehicle {
   }
 }
 
+const STAGE_ORDER = ['Programado', 'Fila Externa', 'Trânsito Externo', 'Operação Terminal'];
+
 const STAGE_COLORS: Record<string, string> = {
   'Operação Terminal': '#10b981',
   'Trânsito Externo': '#0ea5e9',
@@ -62,11 +66,99 @@ const STAGE_COLORS: Record<string, string> = {
 };
 
 const STAGE_ICONS: Record<string, React.ReactNode> = {
-  'Operação Terminal': <Activity size={14} className="text-emerald-500" />,
-  'Trânsito Externo': <Truck size={14} className="text-sky-500" />,
-  'Fila Externa': <Clock size={14} className="text-amber-500" />,
-  'Programado': <MapPin size={14} className="text-slate-500" />
+  'Operação Terminal': <Activity size={20} className="text-emerald-500" />,
+  'Trânsito Externo': <Truck size={20} className="text-sky-500" />,
+  'Fila Externa': <Clock size={20} className="text-amber-500" />,
+  'Programado': <MapPin size={20} className="text-slate-500" />
 };
+
+function MetricTriple({ label, p10, p25, p75, avg, colorClass = 'text-blue-400' }: { 
+  label: string, p10: number, p25: number, p75: number, avg: number, colorClass?: string 
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex justify-between items-end border-b border-white/5 pb-1 mb-1">
+        <span className="text-[9px] text-slate-500 font-bold uppercase">{label}</span>
+        <span className={`text-lg font-black font-mono ${colorClass}`}>{avg.toFixed(1)}h</span>
+      </div>
+      <div className="grid grid-cols-3 gap-1 px-1">
+        <div className="flex flex-col">
+          <span className="text-[7px] text-slate-600 font-bold uppercase">P10</span>
+          <span className="text-[10px] font-bold text-slate-400 font-mono">{p10.toFixed(1)}h</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[7px] text-slate-600 font-bold uppercase">P25</span>
+          <span className="text-[10px] font-bold text-slate-400 font-mono">{p25.toFixed(1)}h</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[7px] text-slate-600 font-bold uppercase">P75</span>
+          <span className="text-[10px] font-bold text-slate-400 font-mono">{p75.toFixed(1)}h</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FlowNode({ item, onSelect }: { item: QueueSummary, onSelect: (status: string) => void }) {
+  const color = STAGE_COLORS[item.status] || '#64748b';
+  
+  return (
+    <div 
+      onClick={() => onSelect(item.status)}
+      className="flex-1 min-w-[300px] h-full flex flex-col group cursor-pointer animate-in fade-in slide-in-from-bottom duration-500"
+    >
+      <div className="relative flex flex-col h-full p-6 rounded-[2.5rem] bg-[#02132b] border border-white/5 group-hover:border-blue-500/30 group-hover:bg-blue-500/5 transition-all shadow-2xl overflow-hidden backdrop-blur-md">
+        {/* Glow Effect */}
+        <div className="absolute -top-24 -right-24 w-48 h-48 rounded-full blur-[80px] opacity-20 pointer-events-none" style={{ backgroundColor: color }}></div>
+        
+        {/* Header Node */}
+        <div className="flex items-start justify-between mb-8">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-2xl bg-white/5 text-white/80 group-hover:scale-110 transition-transform shadow-inner">
+                {STAGE_ICONS[item.status]}
+              </div>
+              <h3 className="text-sm font-black text-slate-400 group-hover:text-white transition-colors uppercase tracking-[0.2em]">{item.status}</h3>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            <span className="text-4xl font-black tracking-tighter text-white">{item.volume}</span>
+            <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">VEÍCULOS NA FILA</span>
+          </div>
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="flex-1 flex flex-col gap-8 justify-center">
+          <MetricTriple 
+            label="Média da Etapa" 
+            avg={item.avg_atual_h}
+            p10={item.p10} 
+            p25={item.p25} 
+            p75={item.p75}
+            colorClass={item.avg_atual_h > item.avg_hist_h && item.avg_hist_h > 0 ? 'text-rose-400' : 'text-blue-400'}
+          />
+          
+          <MetricTriple 
+            label="Acumulado até aqui" 
+            avg={item.avg_acumulado_h}
+            p10={item.p10_acumulado} 
+            p25={item.p25_acumulado} 
+            p75={item.p75_acumulado}
+            colorClass="text-emerald-400"
+          />
+        </div>
+
+        {/* Footer info */}
+        {item.avg_hist_h > 0 && (
+          <div className="mt-8 pt-4 border-t border-white/5 flex justify-between items-center">
+            <span className="text-[8px] text-slate-600 font-bold uppercase">Meta Histórica</span>
+            <span className="text-xs font-mono text-slate-500">{item.avg_hist_h.toFixed(1)}h</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function VehicleTimeline({ vehicle }: { vehicle: Vehicle }) {
   const stages = [
@@ -229,171 +321,94 @@ function ForecastContent() {
     return () => clearInterval(interval);
   }, [terminal]);
 
-  const chartData = {
-    labels: summary.map(s => s.status),
-    datasets: [
-      {
-        label: 'Volume de Veículos',
-        data: summary.map(s => s.volume),
-        backgroundColor: summary.map(s => STAGE_COLORS[s.status] || '#64748b'),
-        borderRadius: 12,
-        hoverOffset: 15,
-      }
-    ]
-  };
-
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    onClick: (_: unknown, elements: { index: number }[]) => {
-      if (elements.length > 0) {
-        const index = elements[0].index;
-        setSelectedStatus(summary[index].status);
-      }
-    },
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: 'rgba(2, 19, 43, 0.95)',
-        titleFont: { size: 14, weight: 'bold' as const },
-        bodyFont: { size: 12 },
-        padding: 12,
-        borderColor: 'rgba(255,255,255,0.1)',
-        borderWidth: 1,
-        callbacks: {
-          label: (item: TooltipItem<'bar'>) => `Volume: ${item.raw as number} veículos`,
-          afterBody: (context: TooltipItem<'bar'>[]) => {
-            const item = summary[context[0].dataIndex];
-            return [
-              '',
-              `MÉDIA NA ETAPA: ${item.avg_atual_h.toFixed(1)}h`,
-              `P75 ETAPA: ${item.p75.toFixed(1)}h`,
-              '----------------',
-              `CICLO ACUMULADO MÉDIO: ${item.avg_acumulado_h.toFixed(1)}h`,
-              `P75 ACUMULADO: ${item.p75_acumulado.toFixed(1)}h`,
-            ];
-          }
-        }
-      }
-    },
-    scales: {
-      y: { 
-        beginAtZero: true, 
-        grid: { color: 'rgba(255,255,255,0.03)' }, 
-        ticks: { color: '#94a3b8', font: { size: 10 } } 
-      },
-      x: { 
-        grid: { display: false }, 
-        ticks: { color: '#f8fafc', font: { size: 12, weight: 'bold' as const } } 
-      }
-    }
-  };
+  const orderedSummary = STAGE_ORDER.map(status => {
+    return summary.find(s => s.status === status) || {
+      status, volume: 0, avg_atual_h: 0, avg_hist_h: 0, p10: 0, p25: 0, p75: 0,
+      avg_acumulado_h: 0, p10_acumulado: 0, p25_acumulado: 0, p75_acumulado: 0
+    };
+  });
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#010b1a] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500"></div>
-          <span className="text-slate-500 font-mono tracking-widest animate-pulse uppercase text-[8px]">Carregando Fila...</span>
+          <span className="text-slate-500 font-mono tracking-widest animate-pulse uppercase text-[8px]">Carregando Forecast...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-[#010b1a] text-white font-sans overflow-hidden flex flex-col">
+    <div className="h-screen bg-[#010b1a] text-white font-sans overflow-hidden flex flex-col p-8">
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
 
-      <div className="flex-1 flex flex-col p-4 max-w-[1920px] mx-auto w-full">
-        {/* Header - More compact */}
-        <div className="flex justify-between items-center mb-4 border-b border-white/5 pb-2">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => window.location.href = `/?terminal=${terminal}`}
-              className="p-2 hover:bg-white/10 rounded-xl transition-all text-slate-400 border border-white/5"
-            >
-              <ArrowLeft size={18} />
-            </button>
-            <h1 className="text-2xl font-black bg-linear-to-r from-emerald-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
-              <Activity className="text-emerald-400" size={24} />
+      {/* Header - Transparent and floating */}
+      <div className="flex justify-between items-center mb-12">
+        <div className="flex items-center gap-6">
+          <button 
+            onClick={() => window.location.href = `/?terminal=${terminal}`}
+            className="p-4 hover:bg-white/5 rounded-3xl transition-all text-slate-400 border border-white/5 group shadow-lg"
+          >
+            <ArrowLeft className="group-hover:-translate-x-1 transition-transform" size={24} />
+          </button>
+          <div>
+            <h1 className="text-4xl font-black bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-4 tracking-tight">
               FORECAST DE OPERAÇÕES
-              <span className="text-xs font-light text-slate-500 tracking-[0.2em] ml-2 uppercase">Terminal {terminal}</span>
             </h1>
-          </div>
-          <div className="text-right">
-              <div className="text-[8px] text-slate-500 font-bold uppercase tracking-widest">Última Atualização</div>
-              <div className="text-sm font-mono text-emerald-400/80">{new Date().toLocaleTimeString('pt-BR')}</div>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs font-black text-blue-500/80 uppercase tracking-[0.4em]">{terminal}</span>
+              <div className="w-1 h-1 rounded-full bg-slate-700"></div>
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Painel Operacional em Tempo Real</span>
+            </div>
           </div>
         </div>
-
-        {/* Main Dashboard Layout */}
-        <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
-          {/* Summary Column - Made more compact */}
-          <div className="col-span-3 flex flex-col gap-3 overflow-y-auto custom-scrollbar pr-1">
-            {summary.map((item) => (
-              <div 
-                key={item.status}
-                onClick={() => setSelectedStatus(item.status)}
-                className="group p-4 rounded-2xl bg-[#02132b] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/1 transition-all cursor-pointer relative overflow-hidden"
-              >
-                <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity">
-                    {STAGE_ICONS[item.status]}
-                </div>
-                <div className="flex flex-col gap-0.5 mb-2">
-                  <span className="text-slate-500 text-[8px] font-black uppercase tracking-widest">{item.status}</span>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-3xl font-bold tracking-tight">{item.volume}</span>
-                    <span className="text-slate-500 text-[10px] font-light lowercase">veículos</span>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
-                  <div className="flex flex-col">
-                    <span className="text-[7px] text-slate-500 uppercase font-bold">Média Etapa</span>
-                    <span className={`text-md font-mono ${item.avg_atual_h > item.avg_hist_h ? 'text-rose-400' : 'text-blue-400'}`}>
-                      {item.avg_atual_h.toFixed(1)}h
-                    </span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[7px] text-slate-500 uppercase font-bold">Ciclo Acumulada</span>
-                    <span className="text-md font-mono text-emerald-400 font-bold">
-                      {item.avg_acumulado_h.toFixed(1)}h
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-2 flex justify-between items-center text-[7px] uppercase tracking-tighter text-slate-500 font-bold">
-                    <span>P75 Etapa: {item.p75.toFixed(1)}h</span>
-                    <span>P75 Acumulado: {item.p75_acumulado.toFixed(1)}h</span>
-                </div>
-              </div>
-            ))}
+        
+        <div className="flex gap-4 items-center">
+          <div className="px-6 py-3 bg-white/5 border border-white/5 rounded-2xl flex flex-col items-end shadow-xl">
+              <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Última Sincronização</span>
+              <span className="text-lg font-mono text-emerald-400 font-black">{new Date().toLocaleTimeString('pt-BR')}</span>
           </div>
+        </div>
+      </div>
 
-          {/* Chart Area - Larger proportion */}
-          <div className="col-span-9 bg-[#02132b] rounded-2xl border border-white/5 p-6 flex flex-col relative min-h-0">
-            <h3 className="text-slate-500 text-[10px] font-black uppercase mb-4 flex items-center gap-2 tracking-widest">
-              <Activity size={14} className="text-blue-400" /> Distribuição da Fila por Etapa Operacional
-            </h3>
-            
-            <div className="flex-1 w-full relative min-h-0">
-              <Bar data={chartData} options={chartOptions} />
-            </div>
+      {/* Horizontal Flow Container */}
+      <div className="flex-1 flex gap-6 min-h-0 items-center overflow-x-auto pb-8 custom-scrollbar relative px-2">
+        {/* Connection Line Layer (Absolutes) */}
+        <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-gradient-to-r from-slate-800 via-blue-900/40 to-slate-800 -translate-y-1/2 -z-10 mx-24"></div>
+        
+        {orderedSummary.map((item, idx) => (
+          <React.Fragment key={item.status}>
+            <FlowNode item={item} onSelect={setSelectedStatus} />
+            {idx < orderedSummary.length - 1 && (
+               <div className="flex flex-col items-center justify-center px-2 animate-pulse">
+                  <div className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-blue-500/50">
+                    <Truck size={16} />
+                  </div>
+               </div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
 
-            {/* TV Legend */}
-            <div className="mt-4 flex justify-center gap-8">
-               {Object.entries(STAGE_COLORS).map(([name, color]) => (
-                 <div key={name} className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }}></div>
-                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">{name}</span>
-                 </div>
-               ))}
+      {/* Footer Info / TV Mode Legend */}
+      <div className="mt-8 flex justify-between items-center border-t border-white/5 pt-6">
+        <div className="flex gap-12">
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full bg-blue-400 shadow-[0_0_10px_rgba(96,165,250,0.5)]"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempos de Etapa</span>
             </div>
-          </div>
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]"></div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempos Acumulados</span>
+            </div>
+        </div>
+        <div className="text-[9px] text-slate-600 font-bold uppercase tracking-widest italic font-mono bg-white/2 px-4 py-2 rounded-full border border-white/5">
+          Dica: Clique em qualquer etapa para visualizar os veículos detalhadamente.
         </div>
       </div>
 
@@ -411,7 +426,7 @@ function ForecastContent() {
 
 export default function ForecastPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center font-mono text-slate-500 text-[8px] tracking-widest lowercase">initializing_forecast...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center font-mono text-slate-500 text-[8px] tracking-widest lowercase">initializing_forecast_flow...</div>}>
       <ForecastContent />
     </Suspense>
   );
