@@ -1,156 +1,285 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Line } from 'react-chartjs-2';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
-  Filler
 } from 'chart.js';
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import { ArrowLeft, Clock, Truck, Play, MapPin, Search } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 );
 
-interface ForecastDataItem {
-  hour: string;
-  avg_cycle_h: number;
-  truck_count: number;
+interface QueueSummary {
+  status: string;
+  avg_atual_h: number;
+  volume: number;
+  avg_hist_h: number;
 }
 
-import { useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+interface Vehicle {
+  id: string;
+  placa: string;
+  origem: string;
+  status: string;
+  horas: number;
+}
 
 function ForecastContent() {
   const searchParams = useSearchParams();
   const terminal = searchParams.get('terminal') || 'TRO';
-  const [data, setData] = useState<ForecastDataItem[]>([]);
+  const [summary, setSummary] = useState<QueueSummary[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
+    setLoading(true);
     fetch(`/api/pac/forecast?terminal=${terminal}`)
       .then(res => res.json())
       .then(json => {
-        setData(json.forecast || []);
+        setSummary(json.summary || []);
+        setVehicles(json.vehicles || []);
         setLoading(false);
       })
-      .catch(err => console.error(err));
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
   }, [terminal]);
 
+  const filteredVehicles = useMemo(() => {
+    return vehicles.filter(v => {
+      const matchesStatus = selectedStatus ? v.status === selectedStatus : true;
+      const matchesSearch = searchTerm 
+        ? v.placa.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          v.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          v.origem.toLowerCase().includes(searchTerm.toLowerCase())
+        : true;
+      return matchesStatus && matchesSearch;
+    });
+  }, [vehicles, selectedStatus, searchTerm]);
+
   const chartData = {
-    labels: data.map(d => {
-      const date = new Date(d.hour);
-      const h = date.getHours().toString().padStart(2, '0');
-      const dLabel = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-      return `${h}h (${dLabel})`;
-    }),
+    labels: summary.map(s => s.status),
     datasets: [
       {
-        label: 'Ciclo Projetado (h)',
-        data: data.map(d => d.avg_cycle_h),
-        borderColor: '#3b82f6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        fill: true,
-        tension: 0.4,
-        pointRadius: 4,
-        pointBackgroundColor: '#3b82f6'
+        label: 'Volume de Veículos',
+        data: summary.map(s => s.volume),
+        backgroundColor: summary.map(s => {
+          if (s.status === 'Em Operação') return '#10b981';
+          if (s.status === 'Em Trânsito Interno') return '#3b82f6';
+          if (s.status === 'No Pátio') return '#f59e0b';
+          return '#64748b';
+        }),
+        borderRadius: 8,
       }
     ]
   };
 
-  const options = {
+  const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    onClick: (_: any, elements: any[]) => {
+      if (elements.length > 0) {
+        const index = elements[0].index;
+        const status = summary[index].status;
+        setSelectedStatus(status === selectedStatus ? null : status);
+      }
+    },
     plugins: {
-      legend: {
-        display: false
-      },
+      legend: { display: false },
       tooltip: {
-        mode: 'index' as const,
-        intersect: false,
         callbacks: {
-          label: (context: { parsed: { y: number | null } }) => `Ciclo: ${(context.parsed.y ?? 0).toFixed(1)}h`
+          afterBody: (context: any) => {
+            const item = summary[context[0].dataIndex];
+            return `Média Atual: ${item.avg_atual_h.toFixed(1)}h\nMeta Histórica: ${item.avg_hist_h.toFixed(1)}h`;
+          }
         }
       }
     },
     scales: {
-      y: {
-        beginAtZero: false,
-        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-        ticks: { color: '#94a3b8' }
-      },
-      x: {
-        grid: { display: false },
-        ticks: { color: '#94a3b8' }
-      }
+      y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+      x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#010b1a] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#010b1a] p-8 text-white">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
+    <div className="min-h-screen bg-[#010b1a] p-4 md:p-8 text-white font-sans">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-blue-400">Projected Cycle Recovery</h1>
-            <p className="text-slate-400 mt-2">Tendência do ciclo baseada na carga atual do pátio e médias históricas.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <button 
+                onClick={() => window.location.href = `/?terminal=${terminal}`}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors text-slate-400"
+              >
+                <ArrowLeft size={20} />
+              </button>
+              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                Análise de Filas & Distribuição
+              </h1>
+            </div>
+            <p className="text-slate-400 text-sm">Visualização em tempo real do fluxo operacional do terminal {terminal}.</p>
           </div>
-          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-            <span className="block text-xs uppercase text-blue-400 font-bold mb-1">Carga Monitorada</span>
-            <span className="text-2xl font-bold">{data.reduce((acc, curr) => acc + curr.truck_count, 0)} Caminhões</span>
+          
+          <div className="flex gap-4 w-full md:w-auto">
+            <div className="flex-1 md:w-64 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input 
+                type="text" 
+                placeholder="Buscar placa, GMO ou origem..."
+                className="w-full bg-[#02132b] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="bg-[#02132b] rounded-2xl border border-white/5 p-6 h-[500px]">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        {/* Summary Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {summary.map((item) => (
+            <div 
+              key={item.status}
+              onClick={() => setSelectedStatus(item.status === selectedStatus ? null : item.status)}
+              className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                selectedStatus === item.status 
+                ? 'bg-blue-500/10 border-blue-500/50 scale-[1.02]' 
+                : 'bg-[#02132b] border-white/5 hover:border-white/20'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <span className="text-slate-400 text-xs font-bold uppercase tracking-wider">{item.status}</span>
+                {item.status === 'Em Operação' && <Play size={14} className="text-emerald-500" />}
+                {item.status === 'No Pátio' && <Clock size={14} className="text-amber-500" />}
+                {item.status === 'Programado' && <Truck size={14} className="text-slate-500" />}
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold">{item.volume}</span>
+                <span className="text-slate-500 text-xs">veículos</span>
+              </div>
+              <div className="mt-3 pt-3 border-t border-white/5 flex flex-col gap-1">
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Média Atual:</span>
+                  <span className={item.avg_atual_h > item.avg_hist_h ? 'text-rose-400 font-bold' : 'text-emerald-400'}>
+                    {item.avg_atual_h.toFixed(1)}h
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-slate-500">Benchmark:</span>
+                  <span>{item.avg_hist_h.toFixed(1)}h</span>
+                </div>
+              </div>
             </div>
-          ) : data.length > 0 ? (
-            <Line data={chartData} options={options} />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500">
-              <p className="text-xl">Nenhum caminhão ativo para projeção.</p>
-              <p className="text-sm">Os dados aparecem conforme caminhões entram no fluxo &quot;CHEGUEI&quot;.</p>
-            </div>
-          )}
+          ))}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-              <div className="bg-[#02132b] p-6 rounded-2xl border border-white/5">
-                <h3 className="text-slate-400 text-sm font-medium mb-4 uppercase tracking-wider">Metodologia</h3>
-                <p className="text-sm text-slate-300 leading-relaxed">
-                    Calculamos o tempo já decorrido desde a emissão e somamos a média histórica das etapas restantes (Viagem/Interno) para projetar a curva de recuperação.
-                </p>
+        {/* Charts & Drill-down */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-1 bg-[#02132b] rounded-2xl border border-white/5 p-6 h-[400px] lg:h-auto">
+            <h3 className="text-slate-400 text-sm font-bold uppercase mb-6 flex items-center gap-2">
+              <MapPin size={16} /> Distribuição Operacional
+            </h3>
+            <div className="h-[300px]">
+              <Bar data={chartData} options={chartOptions} />
             </div>
-            <div className="bg-[#02132b] p-6 rounded-2xl border border-white/5">
-                <h3 className="text-slate-400 text-sm font-medium mb-4 uppercase tracking-wider">Próximos Passos</h3>
-                <ol className="text-xs text-slate-300 list-decimal list-inside space-y-2">
-                    <li>Segregar previsões por Origem</li>
-                    <li>Utilizar Percentis (P25/P75) dinâmicos</li>
-                    <li>Filtro avançado por Categoria de Produto</li>
-                </ol>
-            </div>
-            <div className="bg-[#02132b] p-6 rounded-2xl border border-white/5 flex flex-col justify-center items-center">
+            <p className="text-[10px] text-slate-500 mt-4 text-center italic">
+              * Clique em uma barra para filtrar a lista de veículos
+            </p>
+          </div>
+
+          <div className="lg:col-span-2 bg-[#02132b] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-white/5 flex justify-between items-center">
+              <h3 className="text-slate-400 text-sm font-bold uppercase">
+                {selectedStatus ? `Veículos: ${selectedStatus}` : 'Todos os Veículos Monitorados'}
+                <span className="ml-2 px-2 py-0.5 bg-white/5 rounded-full text-[10px] lowercase font-normal">
+                  {filteredVehicles.length} total
+                </span>
+              </h3>
+              {selectedStatus && (
                 <button 
-                  onClick={() => window.location.href = `/?terminal=${terminal}`}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-900/20"
+                  onClick={() => setSelectedStatus(null)}
+                  className="text-blue-400 text-xs hover:underline"
                 >
-                    Voltar para Cockpit
+                  Limpar Filtro
                 </button>
+              )}
             </div>
+            
+            <div className="overflow-x-auto flex-1 max-h-[600px]">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-[#02132b] text-slate-500 text-xs uppercase z-10">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">GMO / Placa</th>
+                    <th className="px-6 py-4 font-medium">Origem</th>
+                    <th className="px-6 py-4 font-medium">Status</th>
+                    <th className="px-6 py-4 font-medium">Aging</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {filteredVehicles.map((v) => (
+                    <tr key={v.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-200 group-hover:text-blue-400 transition-colors uppercase">{v.placa}</div>
+                        <div className="text-[10px] text-slate-500">ID: {v.id}</div>
+                      </td>
+                      <td className="px-6 py-4 text-slate-400 text-xs truncate max-w-[150px]">{v.origem}</td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase ${
+                          v.status === 'Em Operação' ? 'bg-emerald-500/10 text-emerald-500' :
+                          v.status === 'Em Trânsito Interno' ? 'bg-blue-500/10 text-blue-500' :
+                          v.status === 'No Pátio' ? 'bg-amber-500/10 text-amber-500' :
+                          'bg-slate-500/10 text-slate-500'
+                        }`}>
+                          {v.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 font-mono text-xs">
+                          <Clock size={12} className="text-slate-500" />
+                          <span className={v.horas > 5 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
+                            {v.horas.toFixed(1)}h
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredVehicles.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-slate-500 italic">
+                        Nenhum veículo encontrado com os filtros atuais.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -159,7 +288,7 @@ function ForecastContent() {
 
 export default function ForecastPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500"></div></div>}>
       <ForecastContent />
     </Suspense>
   );

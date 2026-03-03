@@ -20,7 +20,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
 
-    const query: string = `
+    const summaryQuery: string = `
       ${pracaFilter.cte}
       ${pracaFilter.cte ? ',' : 'WITH'} raw_data AS (
           SELECT 
@@ -29,11 +29,13 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${map.dt_emissao} as _col_emissao,
             ${map.dt_cheguei} as _col_cheguei,
             ${map.dt_chegada} as _col_chegada,
+            ${map.dt_chamada} as _col_chamada,
             ${map.dt_peso_saida} as _col_peso_saida,
             ${map.dt_agendamento} as _col_agendamento,
             greatest(
                 coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
                 coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
+                coalesce(try_cast(${map.dt_chamada} as timestamp), timestamp '1900-01-01 00:00:00'),
                 coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00')
             ) as ts_ult
           FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
@@ -47,76 +49,111 @@ export async function GET(request: Request): Promise<NextResponse> {
               FROM raw_data
           ) WHERE rn = 1
       ),
-      active_universe AS (
-          -- Step 1: Arrived trucks (active) + Scheduled trucks (future)
+      categorized AS (
           SELECT 
-            _col_id as gmo_id,
-            try_cast(_col_emissao as timestamp) as dt_emissao,
-            coalesce(try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)) as dt_queue
+            _col_id,
+            CASE 
+              WHEN _col_chegada IS NOT NULL THEN 'Em Operação'
+              WHEN _col_chamada IS NOT NULL THEN 'Em Trânsito Interno'
+              WHEN _col_cheguei IS NOT NULL THEN 'No Pátio'
+              ELSE 'Programado'
+            END as status_operacional,
+            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_status_h
           FROM dedupped
-          WHERE (_col_cheguei is not null OR _col_agendamento is not null)
-            -- Still in terminal or not yet arrived
-            AND (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            -- Limit range (Last 3 days for active, today onwards for scheduled, and Emission max 15 days)
-            AND try_cast(_col_emissao as timestamp) >= date_add('day', -15, now())
+          WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
             AND (
               (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -3, now()))
               OR 
               (_col_agendamento is not null AND try_cast(_col_agendamento as timestamp) >= date_trunc('day', now()))
+              OR
+              (_col_chegada is not null AND try_cast(_col_chegada as timestamp) >= date_add('day', -1, now()))
             )
       ),
-      ranked_queue AS (
-          -- Step 2: Order by arrival (already arrived first, then scheduled)
+      benchmarks AS (
           SELECT 
-            *,
-            row_number() OVER (ORDER BY dt_queue) as queue_pos
-          FROM active_universe
-      ),
-      projections AS (
-          -- Step 3: Shift processing with fixed capacity (72/h)
+            'No Pátio' as status_operacional,
+            coalesce(avg(date_diff('second', try_cast(_col_cheguei as timestamp), try_cast(_col_chamada as timestamp)) / 3600.0), 2.0) as avg_hist_h
+          FROM dedupped WHERE _col_cheguei is not null AND _col_chamada is not null AND try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
+          UNION ALL
           SELECT 
-            r.gmo_id,
-            r.dt_emissao,
-            -- Fixed throughput = 72 vehicles / hour
-            now() + interval '1' hour * (cast(r.queue_pos as double) / 72.0) as expected_exit,
-            (date_diff('second', r.dt_emissao, now()) / 3600.0) + (cast(r.queue_pos as double) / 72.0) as projected_cycle_h
-          FROM ranked_queue r
+            'Em Trânsito Interno',
+            coalesce(avg(date_diff('second', try_cast(_col_chamada as timestamp), try_cast(_col_chegada as timestamp)) / 3600.0), 0.5)
+          FROM dedupped WHERE _col_chamada is not null AND _col_chegada is not null AND try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
+          UNION ALL
+          SELECT 
+            'Em Operação',
+            coalesce(avg(date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_peso_saida as timestamp)) / 3600.0), 1.5)
+          FROM dedupped WHERE _col_chegada is not null AND _col_peso_saida is not null AND try_cast(_col_peso_saida as timestamp) >= date_add('day', -3, now())
       )
       SELECT 
-        date_trunc('hour', expected_exit) as exit_hour,
-        avg(projected_cycle_h) as avg_cycle_h,
-        max(projected_cycle_h) as max_cycle_h,
-        count(*) as truck_count,
-        (SELECT count(*) FROM ranked_queue) as total_monitorado
-      FROM projections
+        c.status_operacional,
+        avg(c.tempo_status_h) as avg_atual_h,
+        count(*) as volume,
+        max(b.avg_hist_h) as avg_hist_h
+      FROM categorized c
+      LEFT JOIN benchmarks b ON b.status_operacional = c.status_operacional
       GROUP BY 1
-      ORDER BY 1`;
+      ORDER BY 
+        CASE c.status_operacional 
+          WHEN 'Programado' THEN 1 
+          WHEN 'No Pátio' THEN 2 
+          WHEN 'Em Trânsito Interno' THEN 3 
+          WHEN 'Em Operação' THEN 4 
+        END`;
 
-    const results: ResultSet | undefined = await runQuery(query);
-    const rows = results?.Rows?.slice(1) || [];
-    
-    const data = rows.map((r: any) => ({
-      hour: r.Data[0].VarCharValue,
-      avg_cycle_h: parseFloat(r.Data[1].VarCharValue || '0'),
-      max_cycle_h: parseFloat(r.Data[2].VarCharValue || '0'),
-      truck_count: parseInt(r.Data[3].VarCharValue || '0')
-    }));
+    const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
+      runQuery(summaryQuery),
+      runQuery(`
+        ${pracaFilter.cte}
+        ${pracaFilter.cte ? ',' : 'WITH'} raw_data AS (
+            SELECT 
+              ${map.id} as id, ${map.placa} as placa, ${map.origem} as origem, 
+              ${map.dt_cheguei} as ch, ${map.dt_chamada} as cda, ${map.dt_chegada} as cga, 
+              ${map.dt_agendamento} as ag, ${map.dt_peso_saida} as ps
+            FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
+            ${pracaFilter.join}
+            WHERE base.${map.terminal} = '${terminal}' ${produtoFilter}
+        ),
+        dedup AS (SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY id ORDER BY coalesce(ps, cga, cda, ch, ag) DESC) as rn FROM raw_data) WHERE rn = 1)
+        SELECT 
+          id, placa, origem,
+          CASE 
+            WHEN cga IS NOT NULL THEN 'Em Operação'
+            WHEN cda IS NOT NULL THEN 'Em Trânsito Interno'
+            WHEN ch IS NOT NULL THEN 'No Pátio'
+            ELSE 'Programado'
+          END as status,
+          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas
+        FROM dedup
+        WHERE ps IS NULL OR ps = ''
+        LIMIT 1000
+      `)
+    ]);
 
-    const totalMonitorado = rows.length > 0 ? parseInt(rows[0].Data[4].VarCharValue || '0') : 0;
+    const summary = summaryResults?.Rows?.slice(1).map((r: any) => ({
+      status: r.Data[0].VarCharValue,
+      avg_atual_h: parseFloat(r.Data[1].VarCharValue || '0'),
+      volume: parseInt(r.Data[2].VarCharValue || '0'),
+      avg_hist_h: parseFloat(r.Data[3].VarCharValue || '0')
+    })) || [];
+
+    const vehicles = vehiclesResults?.Rows?.slice(1).map((r: any) => ({
+      id: r.Data[0].VarCharValue,
+      placa: r.Data[1].VarCharValue,
+      origem: r.Data[2].VarCharValue,
+      status: r.Data[3].VarCharValue,
+      horas: parseFloat(r.Data[4].VarCharValue || '0')
+    })) || [];
 
     return NextResponse.json({
       terminal,
       updated_at: new Date().toISOString(),
-      capacity_h: 72,
-      debug: {
-        total_active: totalMonitorado,
-        map_cols: map
-      },
-      forecast: data
+      summary,
+      vehicles
     });
 
   } catch (error) {
     console.error("Forecast API Error:", error);
-    return NextResponse.json({ error: 'Failed to fetch forecast' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch queue analysis' }, { status: 500 });
   }
 }
