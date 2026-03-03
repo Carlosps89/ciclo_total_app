@@ -102,6 +102,7 @@ export function getCleanMap(columns: string[]): Record<string, string> {
 
   return {
     ...rawMap,
+    dt_chamada: find(['chamada']) || 'chamada',
     dt_chegada: find(['chegada', 'checkin']) || find(['cheguei']) || 'chegada',
     dt_cheguei: find(['cheguei', 'chegou']) || 'cheguei',
     dt_janela: find(['janela', 'window']) || 'janela_agendamento',

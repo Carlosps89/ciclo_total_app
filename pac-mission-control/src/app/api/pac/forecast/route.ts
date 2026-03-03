@@ -21,16 +21,15 @@ export async function GET(request: Request): Promise<NextResponse> {
     console.log(`[Forecast-Debug] Mapped Columns:`, map);
     
     // Additional dynamic mappings for movement and granular status
-    // const colMovimento = rawCols.find(c => ['MOVIMENTO', 'DS_MOVIMENTO', 'TIPO_MOVIMENTO'].includes(c.toUpperCase()));
-    // const colOperacao = rawCols.find(c => ['OPERACAO', 'DS_OPERACAO', 'TIPO_OPERACAO'].includes(c.toUpperCase()));
+    const colMovimento = rawCols.find(c => ['MOVIMENTO', 'DS_MOVIMENTO', 'TIPO_MOVIMENTO'].includes(c.toUpperCase()));
+    const colOperacao = rawCols.find(c => ['OPERACAO', 'DS_OPERACAO', 'TIPO_OPERACAO'].includes(c.toUpperCase()));
     const colSituacao = map.situacao || 'DS_SITUACAO';
 
     const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
     
     // User requested focus on DESCARGA
-    const movementFilter = '';
-    /* 
+    let movementFilter = '';
     if (colMovimento && colOperacao) {
       movementFilter = `AND (base.${colMovimento} = 'DESCARGA' OR base.${colOperacao} = 'DESCARGA')`;
     } else if (colMovimento) {
@@ -38,7 +37,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     } else if (colOperacao) {
       movementFilter = `AND base.${colOperacao} = 'DESCARGA'`;
     }
-    */
     console.log(`[Forecast-Debug] Filters: Movement=${movementFilter} Terminal=${terminal} Producto=${produto}`);
 
     const summaryQuery: string = `
@@ -128,7 +126,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     console.log(`[Forecast-Debug] rawCols:`, JSON.stringify(rawCols));
     console.log(`[Forecast-Debug] Mapped Columns:`, JSON.stringify(map));
 
-    const [summaryResults, vehiclesResults, rawCountRes, sampleRes]: [ResultSet | undefined, ResultSet | undefined, ResultSet | undefined, ResultSet | undefined] = await Promise.all([
+    const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
       runQuery(summaryQuery),
       runQuery(`
         ${pracaFilter.cte}
@@ -176,25 +174,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -30, now()))
           )
         LIMIT 1000
-      `),
-      runQuery(`SELECT count(*) FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" WHERE ${map.terminal} = '${terminal}'`),
-      runQuery(`SELECT ${map.dt_emissao}, ${map.dt_agendamento}, ${map.dt_cheguei}, ${map.dt_chegada}, ${map.dt_peso_saida} 
-                FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" 
-                WHERE ${map.terminal} = '${terminal}' 
-                AND ${map.dt_cheguei} IS NOT NULL 
-                LIMIT 5`)
+      `)
     ]);
-
-    if (sampleRes?.Rows && sampleRes.Rows.length > 1) {
-      console.log(`[Forecast-Debug] Sample RAW Dates:`);
-      sampleRes.Rows.slice(1, 4).forEach((r) => {
-        const d = r.Data || [];
-        console.log(`Row: ${d.map((val) => val.VarCharValue).join(' | ')}`);
-      });
-    }
-
-    const rawCount = rawCountRes?.Rows?.[1]?.Data?.[0]?.VarCharValue || '0';
-    console.log(`[Forecast-Debug] Raw count for terminal ${terminal}: ${rawCount}`);
 
     const summary = summaryResults?.Rows?.slice(1).map((r) => {
       const data = r.Data || [];
