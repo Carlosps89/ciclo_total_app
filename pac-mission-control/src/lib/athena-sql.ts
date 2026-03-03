@@ -89,12 +89,20 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
 // Helper to extract clean column mapping
 export function getCleanMap(columns: string[]): Record<string, string> {
   const rawMap = mapColumns(columns);
-  const find = (keywords: string[]): string | undefined =>
-    columns.find(c => keywords.some(k => c.toLowerCase().includes(k)));
+  const find = (keywords: string[]): string | undefined => {
+    const lowerCols = columns.map(c => c.toLowerCase());
+    // 1. Try exact match
+    for (const k of keywords) {
+      const idx = lowerCols.indexOf(k.toLowerCase());
+      if (idx !== -1) return columns[idx];
+    }
+    // 2. Try includes (substring)
+    return columns.find(c => keywords.some(k => c.toLowerCase().includes(k.toLowerCase())));
+  };
 
   return {
     ...rawMap,
-    dt_chamada: find(['chamada']) || 'chamada',
+    dt_chegada: find(['chegada', 'checkin']) || find(['cheguei']) || 'chegada',
     dt_cheguei: find(['cheguei', 'chegou']) || 'cheguei',
     dt_janela: find(['janela', 'window']) || 'janela_agendamento',
     placa: find(['placa', 'tracao']) || 'placa_tracao',
