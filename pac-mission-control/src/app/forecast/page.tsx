@@ -50,6 +50,7 @@ interface Vehicle {
     cheguei?: string;
     chamada?: string;
     chegada?: string;
+    janela?: string;
   }
 }
 
@@ -70,6 +71,7 @@ const STAGE_ICONS: Record<string, React.ReactNode> = {
 function VehicleTimeline({ vehicle }: { vehicle: Vehicle }) {
   const stages = [
     { label: 'Emissão', time: vehicle.timestamps.emissao, icon: <CheckCircle size={14} /> },
+    { label: 'Janela', time: vehicle.timestamps.janela, icon: <Clock size={14} />, isJanela: true },
     { label: 'Agendamento', time: vehicle.timestamps.agendamento, icon: <Clock size={14} /> },
     { label: 'Chegou', time: vehicle.timestamps.cheguei, icon: <MapPin size={14} /> },
     { label: 'Chamado', time: vehicle.timestamps.chamada, icon: <Activity size={14} /> },
@@ -88,7 +90,7 @@ function VehicleTimeline({ vehicle }: { vehicle: Vehicle }) {
             <div>
               <div className="text-[10px] font-bold text-slate-300">{s.label}</div>
               <div className="text-[9px] text-slate-500">
-                {new Date(s.time!).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                {s.isJanela ? s.time : new Date(s.time!).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
               </div>
             </div>
             {idx < stages.length - 1 && <div className="h-4 w-px bg-white/10 mx-1 hidden sm:block" />}
@@ -115,7 +117,7 @@ function DrillDownModal({
     v.placa.toLowerCase().includes(searchTerm.toLowerCase()) || 
     v.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     v.origem.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  ).sort((a, b) => b.horas - a.horas);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -316,7 +318,7 @@ function ForecastContent() {
             >
               <ArrowLeft size={18} />
             </button>
-            <h1 className="text-2xl font-black bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
+            <h1 className="text-2xl font-black bg-linear-to-r from-emerald-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-3">
               <Activity className="text-emerald-400" size={24} />
               FORECAST DE OPERAÇÕES
               <span className="text-xs font-light text-slate-500 tracking-[0.2em] ml-2 uppercase">Terminal {terminal}</span>
@@ -336,7 +338,7 @@ function ForecastContent() {
               <div 
                 key={item.status}
                 onClick={() => setSelectedStatus(item.status)}
-                className="group p-4 rounded-2xl bg-[#02132b] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/[0.01] transition-all cursor-pointer relative overflow-hidden"
+                className="group p-4 rounded-2xl bg-[#02132b] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/1 transition-all cursor-pointer relative overflow-hidden"
               >
                 <div className="absolute top-2 right-2 opacity-10 group-hover:opacity-20 transition-opacity">
                     {STAGE_ICONS[item.status]}

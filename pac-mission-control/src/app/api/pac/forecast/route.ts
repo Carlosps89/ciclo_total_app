@@ -139,7 +139,8 @@ export async function GET(request: Request): Promise<NextResponse> {
               ${map.dt_cheguei} as ch, ${map.dt_chamada} as cda, ${map.dt_chegada} as cga, 
               ${map.dt_agendamento} as ag, ${map.dt_peso_saida} as ps,
               ${map.dt_emissao} as em,
-              ${colSituacao} as sit
+              ${colSituacao} as sit,
+              ${map.janela_agendamento || 'janela_agendamento'} as jan
             FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
             ${pracaFilter.join}
             WHERE base.${map.terminal} = '${terminal}' ${produtoFilter} ${movementFilter}
@@ -181,7 +182,8 @@ export async function GET(request: Request): Promise<NextResponse> {
           cast(ag as varchar) as dt_agendamento,
           cast(ch as varchar) as dt_cheguei,
           cast(cda as varchar) as dt_chamada,
-          cast(cga as varchar) as dt_chegada
+          cast(cga as varchar) as dt_chegada,
+          cast(jan as varchar) as janela
         FROM active
         WHERE 
           -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
@@ -222,7 +224,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             agendamento: data[7]?.VarCharValue,
             cheguei: data[8]?.VarCharValue,
             chamada: data[9]?.VarCharValue,
-            chegada: data[10]?.VarCharValue
+            chegada: data[10]?.VarCharValue,
+            janela: data[11]?.VarCharValue
         }
       };
     }) || [];
