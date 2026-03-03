@@ -17,6 +17,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
     
     const map: Record<string, string> = getCleanMap(rawCols);
+    console.log(`[Forecast-Debug] rawCols:`, rawCols);
+    console.log(`[Forecast-Debug] Mapped Columns:`, map);
     
     // Additional dynamic mappings for movement and granular status
     const colMovimento = rawCols.find(c => ['MOVIMENTO', 'DS_MOVIMENTO', 'TIPO_MOVIMENTO'].includes(c.toUpperCase()));
@@ -120,6 +122,8 @@ export async function GET(request: Request): Promise<NextResponse> {
           WHEN 'Em Descarga' THEN 5
           WHEN 'Fim Operação' THEN 6
         END`;
+
+    console.log(`[Forecast-Debug] Final Summary Query:`, summaryQuery);
 
     const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
       runQuery(summaryQuery),
