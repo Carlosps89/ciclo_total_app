@@ -79,7 +79,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ) as ts_last_event
           FROM dedupped
           WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            AND upper(coalesce(_col_situacao, '')) NOT LIKE '%CANCELADO%'
+            AND upper(coalesce(_col_situacao, '')) NOT LIKE '%CANCEL%'
       ),
       categorized AS (
           SELECT 
@@ -165,7 +165,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ) as ts_last_event
           FROM dedup
           WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
-            AND upper(coalesce(sit, '')) NOT LIKE '%CANCELADO%'
+            AND upper(coalesce(sit, '')) NOT LIKE '%CANCEL%'
         )
         SELECT 
           id, placa, origem,
