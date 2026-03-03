@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,7 +13,7 @@ import {
 } from 'chart.js';
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
-import { ArrowLeft, Clock, Truck, MapPin, Search, Activity, CheckCircle, Scale } from 'lucide-react';
+import { ArrowLeft, Clock, Truck, MapPin, Search, Activity, CheckCircle } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -29,6 +29,9 @@ interface QueueSummary {
   avg_atual_h: number;
   volume: number;
   avg_hist_h: number;
+  p10: number;
+  p25: number;
+  p75: number;
 }
 
 interface Vehicle {
@@ -37,16 +40,156 @@ interface Vehicle {
   origem: string;
   status: string;
   horas: number;
+  timestamps: {
+    emissao?: string;
+    agendamento?: string;
+    cheguei?: string;
+    chamada?: string;
+    chegada?: string;
+  }
 }
 
 const STAGE_COLORS: Record<string, string> = {
-  'Em Descarga': '#10b981',
-  'Aguardando Balança': '#0ea5e9',
-  'Fim Operação': '#6366f1',
-  'Em Trânsito Interno': '#3b82f6',
-  'No Pátio': '#f59e0b',
+  'Operação Terminal': '#10b981',
+  'Trânsito Externo': '#0ea5e9',
+  'Fila Externa': '#f59e0b',
   'Programado': '#64748b'
 };
+
+const STAGE_ICONS: Record<string, React.ReactNode> = {
+  'Operação Terminal': <Activity size={16} className="text-emerald-500" />,
+  'Trânsito Externo': <Truck size={16} className="text-sky-500" />,
+  'Fila Externa': <Clock size={16} className="text-amber-500" />,
+  'Programado': <MapPin size={16} className="text-slate-500" />
+};
+
+function VehicleTimeline({ vehicle }: { vehicle: Vehicle }) {
+  const stages = [
+    { label: 'Emissão', time: vehicle.timestamps.emissao, icon: <CheckCircle size={14} /> },
+    { label: 'Agendamento', time: vehicle.timestamps.agendamento, icon: <Clock size={14} /> },
+    { label: 'Chegou', time: vehicle.timestamps.cheguei, icon: <MapPin size={14} /> },
+    { label: 'Chamado', time: vehicle.timestamps.chamada, icon: <Activity size={14} /> },
+    { label: 'Chegada', time: vehicle.timestamps.chegada, icon: <Truck size={14} /> },
+  ].filter(s => s.time);
+
+  return (
+    <div className="flex flex-col gap-3 mt-2 p-3 bg-white/5 rounded-xl border border-white/5">
+      <h4 className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Histórico de Etapas</h4>
+      <div className="flex flex-wrap gap-4">
+        {stages.map((s, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-500/10 text-blue-400 rounded-lg">
+              {s.icon}
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-slate-300">{s.label}</div>
+              <div className="text-[9px] text-slate-500">
+                {new Date(s.time!).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+              </div>
+            </div>
+            {idx < stages.length - 1 && <div className="h-4 w-px bg-white/10 mx-1 hidden sm:block" />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DrillDownModal({ 
+  status, 
+  vehicles, 
+  onClose 
+}: { 
+  status: string; 
+  vehicles: Vehicle[]; 
+  onClose: () => void 
+}) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedVehicle, setExpandedVehicle] = useState<string | null>(null);
+
+  const filtered = vehicles.filter(v => 
+    v.placa.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    v.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    v.origem.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <div className="bg-[#02132b] border border-white/10 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+                {STAGE_ICONS[status] || <Truck size={20} />}
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">{status}</h2>
+              <p className="text-xs text-slate-400">{filtered.length} veículos identificados nesta etapa</p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-full transition-colors text-slate-400"
+          >
+            <Search className="rotate-45" size={24} />
+          </button>
+        </div>
+
+        <div className="p-4 bg-white/1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar placa, GMO ou origem..."
+              className="w-full bg-[#010b1a] border border-white/5 rounded-2xl py-3 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+          <div className="grid grid-cols-1 gap-3">
+            {filtered.map((v) => (
+              <div 
+                key={v.id} 
+                className={`p-4 rounded-2xl border transition-all ${
+                  expandedVehicle === v.id 
+                  ? 'bg-blue-500/5 border-blue-500/30' 
+                  : 'bg-[#010b1a] border-white/5 hover:border-white/10'
+                }`}
+              >
+                <div 
+                  className="flex justify-between items-center cursor-pointer"
+                  onClick={() => setExpandedVehicle(expandedVehicle === v.id ? null : v.id)}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="text-lg font-bold text-white tracking-wider">{v.placa}</div>
+                    <div className="text-[10px] text-slate-500 font-mono bg-white/5 px-2 py-0.5 rounded">ID: {v.id}</div>
+                    <div className="text-xs text-slate-400 truncate max-w-[200px]">{v.origem}</div>
+                  </div>
+                  <div className="flex items-center gap-4 font-mono">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></div>
+                      <span className="text-xs font-bold text-blue-400">{v.horas.toFixed(1)}h</span>
+                    </div>
+                    <Activity size={14} className={`transition-transform ${expandedVehicle === v.id ? 'rotate-180' : ''}`} />
+                  </div>
+                </div>
+                {expandedVehicle === v.id && (
+                  <VehicleTimeline vehicle={v} />
+                )}
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div className="py-20 text-center text-slate-500 italic">Nenhum veículo encontrado com este critério.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ForecastContent() {
   const searchParams = useSearchParams();
@@ -55,34 +198,26 @@ function ForecastContent() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`/api/pac/forecast?terminal=${terminal}`)
-      .then(res => res.json())
-      .then(json => {
-        setSummary(json.summary || []);
-        setVehicles(json.vehicles || []);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
+    const fetchData = () => {
+      fetch(`/api/pac/forecast?terminal=${terminal}`)
+        .then(res => res.json())
+        .then(json => {
+          setSummary(json.summary || []);
+          setVehicles(json.vehicles || []);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error(err);
+          setLoading(false);
+        });
+    };
+    
+    fetchData();
+    const interval = setInterval(fetchData, 60000); // 1 min auto-refresh for TV
+    return () => clearInterval(interval);
   }, [terminal]);
-
-  const filteredVehicles = useMemo(() => {
-    return vehicles.filter(v => {
-      const matchesStatus = selectedStatus ? v.status === selectedStatus : true;
-      const matchesSearch = searchTerm 
-        ? v.placa.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          v.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          v.origem.toLowerCase().includes(searchTerm.toLowerCase())
-        : true;
-      return matchesStatus && matchesSearch;
-    });
-  }, [vehicles, selectedStatus, searchTerm]);
 
   const chartData = {
     labels: summary.map(s => s.status),
@@ -91,7 +226,8 @@ function ForecastContent() {
         label: 'Volume de Veículos',
         data: summary.map(s => s.volume),
         backgroundColor: summary.map(s => STAGE_COLORS[s.status] || '#64748b'),
-        borderRadius: 8,
+        borderRadius: 12,
+        hoverOffset: 15,
       }
     ]
   };
@@ -102,213 +238,176 @@ function ForecastContent() {
     onClick: (_: unknown, elements: { index: number }[]) => {
       if (elements.length > 0) {
         const index = elements[0].index;
-        const status = summary[index].status;
-        setSelectedStatus(status === selectedStatus ? null : status);
+        setSelectedStatus(summary[index].status);
       }
     },
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: 'rgba(2, 19, 43, 0.95)',
+        titleFont: { size: 16, weight: 'bold' as const },
+        bodyFont: { size: 14 },
+        padding: 16,
+        borderColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
         callbacks: {
+          label: (item: { raw: number }) => `Volume: ${item.raw} veículos`,
           afterBody: (context: { dataIndex: number }[]) => {
             const item = summary[context[0].dataIndex];
-            return `Média Atual: ${item.avg_atual_h.toFixed(1)}h\nBenchmark: ${item.avg_hist_h.toFixed(1)}h`;
+            return [
+              '',
+              `Média: ${item.avg_atual_h.toFixed(1)}h`,
+              `Meta: ${item.avg_hist_h.toFixed(1)}h`,
+              `P10: ${item.p10.toFixed(1)}h`,
+              `P25: ${item.p25.toFixed(1)}h`,
+              `P75: ${item.p75.toFixed(1)}h`,
+            ];
           }
         }
       }
     },
     scales: {
-      y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-      x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+      y: { 
+        beginAtZero: true, 
+        grid: { color: 'rgba(255,255,255,0.03)' }, 
+        ticks: { color: '#94a3b8', font: { size: 12 } } 
+      },
+      x: { 
+        grid: { display: false }, 
+        ticks: { color: '#f8fafc', font: { size: 14, weight: 'bold' as const } } 
+      }
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#010b1a] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500"></div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500"></div>
+          <span className="text-slate-500 font-mono tracking-widest animate-pulse uppercase text-[10px]">Carregando Fila...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#010b1a] p-4 md:p-8 text-white font-sans">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div className="h-screen bg-[#010b1a] text-white font-sans overflow-hidden flex flex-col">
+      <style jsx global>{`
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+      `}</style>
+
+      <div className="flex-1 flex flex-col p-6 max-w-[1920px] mx-auto w-full">
+        {/* Header - Compact for TV */}
+        <div className="flex justify-between items-end mb-8 border-b border-white/5 pb-4">
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <h1 className="text-4xl font-black bg-gradient-to-r from-emerald-400 via-blue-400 to-indigo-400 bg-clip-text text-transparent flex items-center gap-4">
               <button 
                 onClick={() => window.location.href = `/?terminal=${terminal}`}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors text-slate-400"
+                className="p-3 hover:bg-white/10 rounded-2xl transition-all text-slate-400 border border-white/5 hover:border-white/20"
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft size={24} />
               </button>
-              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-emerald-400 to-blue-400 bg-clip-text text-transparent">
-                Fila de Descarga & Operação
-              </h1>
-            </div>
-            <p className="text-slate-400 text-sm">Monitoramento detalhado do fluxo de descarga no terminal {terminal}.</p>
+              <Activity className="text-emerald-400" size={32} />
+              FORECAST DE OPERAÇÕES
+              <span className="text-sm font-light text-slate-500 tracking-[0.3em] ml-2">TERMINAL {terminal}</span>
+            </h1>
           </div>
-          
-          <div className="flex gap-4 w-full md:w-auto">
-            <div className="flex-1 md:w-64 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-              <input 
-                type="text" 
-                placeholder="Buscar placa, GMO ou origem..."
-                className="w-full bg-[#02132b] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+          <div className="flex items-center gap-8">
+            <div className="text-right">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Última Atualização</div>
+                <div className="text-lg font-mono text-emerald-400/80">{new Date().toLocaleTimeString('pt-BR')}</div>
             </div>
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-          {summary.map((item) => (
-            <div 
-              key={item.status}
-              onClick={() => setSelectedStatus(item.status === selectedStatus ? null : item.status)}
-              className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
-                selectedStatus === item.status 
-                ? 'bg-blue-500/10 border-blue-500/50 scale-[1.02]' 
-                : 'bg-[#02132b] border-white/5 hover:border-white/20'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-slate-400 text-[10px] font-bold uppercase tracking-wider truncate mr-2">{item.status}</span>
-                {item.status === 'Em Descarga' && <Activity size={12} className="text-emerald-500" />}
-                {item.status === 'Aguardando Balança' && <Scale size={12} className="text-sky-500" />}
-                {item.status === 'Fim Operação' && <CheckCircle size={12} className="text-indigo-500" />}
-                {item.status === 'No Pátio' && <Clock size={12} className="text-amber-500" />}
-                {item.status === 'Programado' && <Truck size={12} className="text-slate-500" />}
-              </div>
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold">{item.volume}</span>
-                  <span className="text-slate-500 text-[10px]">veículos</span>
+        {/* Main Dashboard Layout */}
+        <div className="flex-1 grid grid-cols-12 gap-6">
+          {/* Summary Column */}
+          <div className="col-span-3 flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-2">
+            {summary.map((item) => (
+              <div 
+                key={item.status}
+                onClick={() => setSelectedStatus(item.status)}
+                className="group p-6 rounded-3xl bg-[#02132b] border border-white/5 hover:border-blue-500/30 hover:bg-blue-500/[0.02] transition-all cursor-pointer relative overflow-hidden"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    {STAGE_ICONS[item.status]}
                 </div>
-                <div className="mt-2 pt-2 border-t border-white/5 flex flex-col gap-0.5">
-                  <div className="flex justify-between text-[9px]">
-                    <span className="text-slate-500">Média:</span>
-                    <span className={item.avg_atual_h > item.avg_hist_h ? 'text-rose-400 font-bold' : 'text-emerald-400'}>
+                <div className="flex flex-col gap-1 mb-4">
+                  <span className="text-slate-500 text-[10px] font-black uppercase tracking-widest">{item.status}</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold tracking-tight">{item.volume}</span>
+                    <span className="text-slate-500 text-xs font-light lowercase">veículos</span>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mt-auto pt-4 border-t border-white/5">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold">Média Atual</span>
+                    <span className={`text-xl font-mono ${item.avg_atual_h > item.avg_hist_h ? 'text-rose-400' : 'text-emerald-400'}`}>
                       {item.avg_atual_h.toFixed(1)}h
                     </span>
                   </div>
-                  <div className="flex justify-between text-[9px]">
-                    <span className="text-slate-500">Meta:</span>
-                    <span className="text-slate-400">{item.avg_hist_h.toFixed(1)}h</span>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold">P75 (Retardo)</span>
+                    <span className="text-xl font-mono text-slate-300">
+                      {item.p75.toFixed(1)}h
+                    </span>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Charts & Drill-down */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 bg-[#02132b] rounded-2xl border border-white/5 p-6 flex flex-col min-h-[400px]">
-            <h3 className="text-slate-400 text-sm font-bold uppercase mb-6 flex items-center gap-2">
-              <MapPin size={16} /> Mapa da Fila (Descarga)
-            </h3>
-            <div className="flex-1 relative">
-              <Bar data={chartData} options={chartOptions} />
-            </div>
-            <div className="mt-4 p-3 bg-white/5 rounded-xl border border-white/5">
-                <h4 className="text-[10px] text-slate-400 font-bold uppercase mb-2">Legenda Operacional</h4>
-                <div className="grid grid-cols-2 gap-2">
-                   {Object.entries(STAGE_COLORS).map(([name, color]) => (
-                     <div key={name} className="flex items-center gap-1.5 text-[9px] text-slate-500">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></div>
-                        <span className="truncate">{name}</span>
-                     </div>
-                   ))}
-                </div>
-            </div>
+            ))}
           </div>
 
-          <div className="lg:col-span-2 bg-[#02132b] rounded-2xl border border-white/5 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/1">
-              <h3 className="text-slate-400 text-sm font-bold uppercase flex items-center gap-2">
-                {selectedStatus ? `Veículos: ${selectedStatus}` : 'Todos os Veículos de Descarga'}
-                <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 rounded-full text-[10px] lowercase font-normal">
-                  {filteredVehicles.length} detectados
-                </span>
-              </h3>
-              {selectedStatus && (
-                <button 
-                  onClick={() => setSelectedStatus(null)}
-                  className="text-white/40 hover:text-white text-[10px] uppercase font-bold transition-colors"
-                >
-                  Limpar Filtro
-                </button>
-              )}
+          {/* Chart Area */}
+          <div className="col-span-9 bg-[#02132b] rounded-3xl border border-white/5 p-8 flex flex-col relative">
+            <div className="absolute top-8 right-8 flex gap-4">
+                <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-full border border-white/5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tempo Real</span>
+                </div>
             </div>
+
+            <h3 className="text-slate-500 text-xs font-black uppercase mb-8 flex items-center gap-3 tracking-widest">
+              <Activity size={18} className="text-blue-400" /> Distribuição da Fila por Etapa Operacional
+            </h3>
             
-            <div className="overflow-x-auto flex-1 max-h-[600px]">
-              <table className="w-full text-left text-sm">
-                <thead className="sticky top-0 bg-[#02132b] text-slate-500 text-[10px] uppercase z-10 border-b border-white/5">
-                  <tr>
-                    <th className="px-6 py-4 font-bold">GMO / Placa</th>
-                    <th className="px-6 py-4 font-bold">Origem</th>
-                    <th className="px-6 py-4 font-bold">Status Detalhado</th>
-                    <th className="px-6 py-4 font-bold">Aging (Etapa)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredVehicles.map((v) => (
-                    <tr key={v.id} className="hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-200 group-hover:text-blue-400 transition-colors uppercase">{v.placa}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">ID: {v.id}</div>
-                      </td>
-                      <td className="px-6 py-4 text-slate-400 text-xs truncate max-w-[150px]">{v.origem}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: STAGE_COLORS[v.status] || '#64748b' }}></div>
-                            <span className="text-[10px] font-bold uppercase text-slate-300">
-                                {v.status}
-                            </span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 font-mono text-xs">
-                          <div className={`h-1 w-12 rounded-full bg-white/5 overflow-hidden`}>
-                             <div 
-                                className={`h-full ${v.horas > 5 ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                                style={{ width: `${Math.min(100, (v.horas/10)*100)}%` }}
-                             ></div>
-                          </div>
-                          <span className={v.horas > 5 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
-                            {v.horas.toFixed(1)}h
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredVehicles.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-slate-500 italic text-xs">
-                        Nenhum veículo identificado para descarga com os filtros aplicados.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="flex-1 w-full relative">
+              <Bar data={chartData} options={chartOptions} />
+            </div>
+
+            {/* TV Legend */}
+            <div className="mt-8 flex justify-center gap-12">
+               {Object.entries(STAGE_COLORS).map(([name, color]) => (
+                 <div key={name} className="flex items-center gap-3 group translate-y-0 hover:-translate-y-1 transition-transform">
+                    <div className="w-4 h-4 rounded-lg shadow-lg shadow-black/20" style={{ backgroundColor: color }}></div>
+                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">{name}</span>
+                 </div>
+               ))}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Drill-down Modal */}
+      {selectedStatus && (
+        <DrillDownModal 
+          status={selectedStatus} 
+          vehicles={vehicles.filter(v => v.status === selectedStatus)}
+          onClose={() => setSelectedStatus(null)}
+        />
+      )}
     </div>
   );
 }
 
 export default function ForecastPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-emerald-500"></div></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-[#010b1a] flex items-center justify-center font-mono text-slate-500 text-[10px] tracking-widest">INIT_FORECAST...</div>}>
       <ForecastContent />
     </Suspense>
   );
 }
+

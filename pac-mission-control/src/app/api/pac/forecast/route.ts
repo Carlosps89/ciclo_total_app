@@ -86,14 +86,9 @@ export async function GET(request: Request): Promise<NextResponse> {
           SELECT 
             _col_id,
             CASE 
-              WHEN _col_chegada IS NOT NULL THEN 
-                CASE 
-                   WHEN _col_situacao LIKE '%DESCARGA%' THEN 'Em Descarga'
-                   WHEN _col_situacao LIKE '%PESAGEM%' OR _col_situacao LIKE '%BALANCA%' THEN 'Aguardando Balança'
-                   ELSE 'Fim Operação'
-                END
-              WHEN _col_chamada IS NOT NULL THEN 'Em Trânsito Interno'
-              WHEN _col_cheguei IS NOT NULL THEN 'No Pátio'
+              WHEN _col_chegada IS NOT NULL THEN 'Operação Terminal'
+              WHEN _col_chamada IS NOT NULL THEN 'Trânsito Externo'
+              WHEN _col_cheguei IS NOT NULL THEN 'Fila Externa'
               ELSE 'Programado'
             END as status_operacional,
             date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_status_h
@@ -106,29 +101,28 @@ export async function GET(request: Request): Promise<NextResponse> {
             (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -5, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
       ),
       benchmarks AS (
-          SELECT 'No Pátio' as status_operacional, 2.0 as avg_hist_h
-          UNION ALL SELECT 'Em Trânsito Interno', 0.5
-          UNION ALL SELECT 'Aguardando Balança', 1.0
-          UNION ALL SELECT 'Em Descarga', 2.5
-          UNION ALL SELECT 'Fim Operação', 0.5
+          SELECT 'Fila Externa' as status_operacional, 2.0 as avg_hist_h
+          UNION ALL SELECT 'Trânsito Externo', 0.5
+          UNION ALL SELECT 'Operação Terminal', 4.0
           UNION ALL SELECT 'Programado', 0.0
       )
       SELECT 
         c.status_operacional,
         avg(c.tempo_status_h) as avg_atual_h,
         count(*) as volume,
-        max(b.avg_hist_h) as avg_hist_h
+        max(b.avg_hist_h) as avg_hist_h,
+        approx_percentile(c.tempo_status_h, 0.1) as p10,
+        approx_percentile(c.tempo_status_h, 0.25) as p25,
+        approx_percentile(c.tempo_status_h, 0.75) as p75
       FROM categorized c
       LEFT JOIN benchmarks b ON b.status_operacional = c.status_operacional
       GROUP BY 1
       ORDER BY 
         CASE c.status_operacional 
           WHEN 'Programado' THEN 1 
-          WHEN 'No Pátio' THEN 2 
-          WHEN 'Em Trânsito Interno' THEN 3 
-          WHEN 'Aguardando Balança' THEN 4
-          WHEN 'Em Descarga' THEN 5
-          WHEN 'Fim Operação' THEN 6
+          WHEN 'Fila Externa' THEN 2 
+          WHEN 'Trânsito Externo' THEN 3 
+          WHEN 'Operação Terminal' THEN 4
         END`;
 
     console.log(`[Forecast-Debug] Final Summary Query:`, summaryQuery);
@@ -176,17 +170,17 @@ export async function GET(request: Request): Promise<NextResponse> {
         SELECT 
           id, placa, origem,
           CASE 
-            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 
-              CASE 
-                WHEN sit LIKE '%DESCARGA%' THEN 'Em Descarga'
-                WHEN sit LIKE '%PESAGEM%' OR sit LIKE '%BALANCA%' THEN 'Aguardando Balança'
-                ELSE 'Fim Operação'
-              END
-            WHEN try_cast(cda as timestamp) IS NOT NULL THEN 'Em Trânsito Interno'
-            WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'No Pátio'
+            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 'Operação Terminal'
+            WHEN try_cast(cda as timestamp) IS NOT NULL THEN 'Trânsito Externo'
+            WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'Fila Externa'
             ELSE 'Programado'
           END as status,
-          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas
+          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas,
+          cast(em as varchar) as dt_emissao,
+          cast(ag as varchar) as dt_agendamento,
+          cast(ch as varchar) as dt_cheguei,
+          cast(cda as varchar) as dt_chamada,
+          cast(cga as varchar) as dt_chegada
         FROM active
         WHERE 
           -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
@@ -204,7 +198,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         status: data[0]?.VarCharValue || '',
         avg_atual_h: parseFloat(data[1]?.VarCharValue || '0'),
         volume: parseInt(data[2]?.VarCharValue || '0'),
-        avg_hist_h: parseFloat(data[3]?.VarCharValue || '0')
+        avg_hist_h: parseFloat(data[3]?.VarCharValue || '0'),
+        p10: parseFloat(data[4]?.VarCharValue || '0'),
+        p25: parseFloat(data[5]?.VarCharValue || '0'),
+        p75: parseFloat(data[6]?.VarCharValue || '0')
       };
     }) || [];
 
@@ -215,7 +212,14 @@ export async function GET(request: Request): Promise<NextResponse> {
         placa: data[1]?.VarCharValue || '',
         origem: data[2]?.VarCharValue || '',
         status: data[3]?.VarCharValue || '',
-        horas: parseFloat(data[4]?.VarCharValue || '0')
+        horas: parseFloat(data[4]?.VarCharValue || '0'),
+        timestamps: {
+            emissao: data[5]?.VarCharValue,
+            agendamento: data[6]?.VarCharValue,
+            cheguei: data[7]?.VarCharValue,
+            chamada: data[8]?.VarCharValue,
+            chegada: data[9]?.VarCharValue
+        }
       };
     }) || [];
 
