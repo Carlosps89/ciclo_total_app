@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
@@ -72,6 +72,16 @@ export async function GET(request: Request): Promise<NextResponse> {
               FROM raw_data
           ) WHERE rn = 1
       ),
+      active AS (
+          SELECT *,
+             greatest(
+              coalesce(try_cast(_col_chegada as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(_col_chamada as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(_col_cheguei as timestamp), timestamp '1900-01-01 00:00:00')
+            ) as ts_last_event
+          FROM dedupped
+          WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
+      ),
       categorized AS (
           SELECT 
             _col_id,
@@ -87,17 +97,13 @@ export async function GET(request: Request): Promise<NextResponse> {
               ELSE 'Programado'
             END as status_operacional,
             date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), now()) / 3600.0 as tempo_status_h
-          FROM dedupped
-          WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            AND (
-              (_col_cheguei is not null AND try_cast(_col_cheguei as timestamp) >= date_add('day', -120, now()))
-              OR 
-              (_col_agendamento is not null AND try_cast(_col_agendamento as timestamp) >= date_add('day', -120, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
-              OR
-              (_col_chegada is not null AND try_cast(_col_chegada as timestamp) >= date_add('day', -120, now()))
-              OR
-              (_col_emissao is not null AND try_cast(_col_emissao as timestamp) >= date_add('day', -120, now()))
-            )
+          FROM active
+          WHERE 
+            -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
+            (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -5, now()))
+            OR
+            -- Or it is a future/recent appt
+            (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -5, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
       ),
       benchmarks AS (
           SELECT 'No Pátio' as status_operacional, 2.0 as avg_hist_h
@@ -156,6 +162,16 @@ export async function GET(request: Request): Promise<NextResponse> {
               coalesce(try_cast(em as timestamp), timestamp '1900-01-01 00:00:00')
             ) DESC) as rn FROM raw_data
           ) WHERE rn = 1
+        ),
+        active AS (
+          SELECT *,
+             greatest(
+              coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
+              coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00')
+            ) as ts_last_event
+          FROM dedup
+          WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
         )
         SELECT 
           id, placa, origem,
@@ -171,17 +187,13 @@ export async function GET(request: Request): Promise<NextResponse> {
             ELSE 'Programado'
           END as status,
           date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), now()) / 3600.0 as horas
-        FROM dedup
-        WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
-          AND (
-            (ch is not null AND try_cast(ch as timestamp) >= date_add('day', -120, now()))
-            OR 
-            (ag is not null AND try_cast(ag as timestamp) >= date_add('day', -120, now()) AND try_cast(ag as timestamp) <= date_add('day', 3, now()))
-            OR
-            (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -120, now()))
-            OR
-            (em is not null AND try_cast(em as timestamp) >= date_add('day', -120, now()))
-          )
+        FROM active
+        WHERE 
+          -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
+          (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -5, now()))
+          OR
+          -- Or it is a future/recent appt
+          (ts_last_event = timestamp '1900-01-01' AND try_cast(ag as timestamp) >= date_add('day', -5, now()) AND try_cast(ag as timestamp) <= date_add('day', 3, now()))
         LIMIT 1000
       `)
     ]);
