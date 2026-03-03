@@ -139,6 +139,7 @@ export async function GET(request: Request): Promise<NextResponse> {
               ${map.id} as id, ${map.placa} as placa, ${map.origem} as origem, 
               ${map.dt_cheguei} as ch, ${map.dt_chamada} as cda, ${map.dt_chegada} as cga, 
               ${map.dt_agendamento} as ag, ${map.dt_peso_saida} as ps,
+              ${map.dt_emissao} as em,
               ${colSituacao} as sit
             FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
             ${pracaFilter.join}
@@ -152,7 +153,7 @@ export async function GET(request: Request): Promise<NextResponse> {
               coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(ag as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
+              coalesce(try_cast(em as timestamp), timestamp '1900-01-01 00:00:00')
             ) DESC) as rn FROM raw_data
           ) WHERE rn = 1
         )
@@ -179,7 +180,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             OR
             (cga is not null AND try_cast(cga as timestamp) >= date_add('day', -120, now()))
             OR
-            (try_cast(${map.dt_emissao} as timestamp) is not null AND try_cast(${map.dt_emissao} as timestamp) >= date_add('day', -120, now()))
+            (em is not null AND try_cast(em as timestamp) >= date_add('day', -120, now()))
           )
         LIMIT 1000
       `)
