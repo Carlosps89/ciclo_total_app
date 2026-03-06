@@ -14,14 +14,14 @@ Este guia descreve como configurar o acesso via SSO (Single Sign-On) da Rumo par
 
 Para configurar o perfil `rumo-sso` exigido pelo projeto:
 
-1. Abra o terminal e execute:
    ```bash
    aws configure sso --profile rumo-sso
    ```
 
-2. Insira as informações solicitadas (geralmente fornecidas pela TI/Cloud da Rumo):
-   - **SSO start URL**: `https://d-xxxxxxxxxx.awsapps.com/start` (substitua pelo URL real)
-   - **SSO Region**: `us-east-1` ou `sa-east-1` (conforme orientado)
+2. Insira as informações solicitadas:
+   - **SSO session name**: `rumo-sso`
+   - **SSO start URL**: `https://d-94670c90c8.awsapps.com/start/#`
+   - **SSO Region**: `sa-east-1`
 
 3. O navegador será aberto para você做 o login com suas credenciais corporativas.
 4. Após o login, escolha a conta AWS e a role (`PermissionSet`) correta.
