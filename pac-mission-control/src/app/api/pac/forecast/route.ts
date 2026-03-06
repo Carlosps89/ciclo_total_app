@@ -95,9 +95,9 @@ export async function GET(request: Request): Promise<NextResponse> {
           SELECT 
             _col_id,
             CASE 
-              WHEN _col_chegada IS NOT NULL THEN 'Operação Terminal'
-              WHEN _col_chamada IS NOT NULL THEN 'Trânsito Externo'
-              WHEN _col_cheguei IS NOT NULL THEN 'Fila Externa'
+              WHEN try_cast(_col_chegada as timestamp) IS NOT NULL THEN 'Operação Terminal'
+              WHEN try_cast(_col_chamada as timestamp) IS NOT NULL THEN 'Trânsito Externo'
+              WHEN try_cast(_col_cheguei as timestamp) IS NOT NULL THEN 'Fila Externa'
               ELSE 'Programado'
             END as status_operacional,
             date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), date_add('hour', -4, now())) / 3600.0 as tempo_status_h,
@@ -112,7 +112,14 @@ export async function GET(request: Request): Promise<NextResponse> {
               (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -5, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
             )
             AND (
-              _col_cheguei IS NOT NULL -- This is any stage from Fila Externa onwards
+              -- Stage specific filters to avoid old ghosts/stuck vehicles
+              CASE 
+                WHEN _col_cheguei IS NOT NULL AND _col_chamada IS NULL THEN date_diff('hour', try_cast(_col_cheguei as timestamp), date_add('hour', -4, now())) <= 48
+                ELSE true
+              END
+            )
+            AND (
+              try_cast(_col_cheguei as timestamp) IS NOT NULL -- This is any stage from Fila Externa onwards
               OR try_cast(_col_janela as timestamp) >= date_add('hour', -24, date_add('hour', -4, now()))
             )
       ),
@@ -221,7 +228,13 @@ export async function GET(request: Request): Promise<NextResponse> {
             (ts_last_event = timestamp '1900-01-01' AND try_cast(ag as timestamp) >= date_add('day', -5, now()) AND try_cast(ag as timestamp) <= date_add('day', 3, now()))
           )
           AND (
-            ch IS NOT NULL
+            CASE 
+              WHEN try_cast(ch as timestamp) IS NOT NULL AND try_cast(cda as timestamp) IS NULL THEN date_diff('hour', try_cast(ch as timestamp), date_add('hour', -4, now())) <= 48
+              ELSE true
+            END
+          )
+          AND (
+            try_cast(ch as timestamp) IS NOT NULL
             OR try_cast(jan as timestamp) >= date_add('hour', -24, date_add('hour', -4, now()))
           )
         LIMIT 1000
@@ -265,6 +278,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       };
     }) || [];
 
+    const maxAcumuladoByStage = summary.reduce((acc, s) => {
+      const topVehicles = vehicles
+        .filter(v => v.status === s.status)
+        .sort((a, b) => b.horas_acumuladas - a.horas_acumuladas)
+        .slice(0, 3)
+        .map(v => `${v.placa}(${v.horas_acumuladas.toFixed(1)}h)`);
+      acc[s.status] = topVehicles.join(', ');
+      return acc;
+    }, {} as Record<string, string>);
+
+    console.log(`[Forecast-Audit] Max Accumulated by Stage:`, maxAcumuladoByStage);
     console.log(`[Forecast-Debug] Final Results: SummaryCount=${summary.length} VehiclesCount=${vehicles.length}`);
 
     return NextResponse.json({

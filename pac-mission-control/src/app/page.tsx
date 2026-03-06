@@ -350,6 +350,15 @@ function DashboardContent() {
                         </Link>
 
                         <Link 
+                            href={`/diagnostics/root-cause?terminal=${terminal}`}
+                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            onClick={() => setIsMenuOpen(false)}
+                        >
+                            <Activity className="w-5 h-5 text-emerald-400" />
+                            <span className="font-bold">Diagnóstico de Ciclo</span>
+                        </Link>
+
+                        <Link 
                             href="/admin/users" 
                             className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
                             onClick={() => setIsMenuOpen(false)}
@@ -638,6 +647,15 @@ function DashboardContent() {
                       >
                           <CalendarDays className="w-5 h-5 text-blue-500" />
                           <span className="font-bold">Análise Histórica</span>
+                      </Link>
+
+                      <Link 
+                          href={`/diagnostics/root-cause?terminal=${terminal}`}
+                          className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                          onClick={() => setIsMenuOpen(false)}
+                      >
+                          <Activity className="w-5 h-5 text-emerald-400" />
+                          <span className="font-bold">Diagnóstico de Ciclo</span>
                       </Link>
 
                       {session?.role === 'ADM' && (
