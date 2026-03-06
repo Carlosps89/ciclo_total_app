@@ -5,7 +5,7 @@ import { getCleanMap } from './src/lib/athena-sql';
 async function main() {
     const terminal = 'TRO';
     const rawCols = await runQuery(`SELECT * FROM "db_gmo_trusted"."VW_Ciclo" LIMIT 0`)
-      .then(res => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name) || []);
+      .then(res => res?.ResultSetMetadata?.ColumnInfo?.map((c: { Name?: string }) => c.Name) || []);
     
     const map = getCleanMap(rawCols);
 
@@ -30,7 +30,7 @@ async function main() {
     const rows = results?.Rows?.slice(1) || [];
     
     console.log("--- GHOST VEHICLES (>48h in Fila Externa) ---");
-    rows.forEach(r => {
+    rows.forEach((r: any) => {
         const d = r.Data;
         console.log(`ID: ${d[0].VarCharValue} | Placa: ${d[1].VarCharValue} | Chegou: ${d[2].VarCharValue} | Espera: ${d[3].VarCharValue}h`);
     });

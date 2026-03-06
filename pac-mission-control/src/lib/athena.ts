@@ -56,12 +56,33 @@ export async function runQuery(query: string): Promise<any | undefined> {
 
         console.log(`[Athena] Query ${QueryExecutionId} FINALIZADA com sucesso.`);
 
-        // Get results
-        const results = await client.send(
-            new GetQueryResultsCommand({ QueryExecutionId })
-        );
+        // Get results with pagination to handle > 1000 rows
+        let nextToken: string | undefined = undefined;
+        let allRows: any[] = [];
+        let resultSetMetadata: any = null;
 
-        return results.ResultSet;
+        do {
+            const command = new GetQueryResultsCommand({ 
+                QueryExecutionId,
+                NextToken: nextToken
+            });
+            const res: any = await client.send(command);
+
+            if (!resultSetMetadata && res.ResultSet?.ResultSetMetadata) {
+                resultSetMetadata = res.ResultSet.ResultSetMetadata;
+            }
+
+            if (res.ResultSet?.Rows) {
+                allRows = allRows.concat(res.ResultSet.Rows);
+            }
+
+            nextToken = res.NextToken;
+        } while (nextToken);
+
+        return {
+            ResultSetMetadata: resultSetMetadata,
+            Rows: allRows
+        };
     } catch (error: unknown) {
         console.error("!!! [Athena] ERRO DE EXECUÇÃO !!!");
         console.error("Query:", query.substring(0, 200) + "...");

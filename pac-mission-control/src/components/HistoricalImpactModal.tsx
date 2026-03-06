@@ -138,7 +138,7 @@ export default function HistoricalImpactModal({
     };
   }, [data]);
 
-  const gaugeOptions: ChartOptions<'doughnut'> = {
+  const gaugeOptions: any = {
     plugins: {
       tooltip: { enabled: false },
       legend: { display: false },

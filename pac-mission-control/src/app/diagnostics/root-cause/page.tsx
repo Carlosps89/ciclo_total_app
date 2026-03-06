@@ -146,7 +146,7 @@ function RCADashboard() {
     }
   };
 
-  const paretoData: ChartData<'bar'> = useMemo(() => {
+  const paretoData: any = useMemo(() => {
     if (!data) return { labels: [], datasets: [] };
     const origins = data.origins.slice(0, 10);
     const totalImpact = origins.reduce((acc: number, o: RCAOrigin) => acc + Math.max(0, o.impact), 0);

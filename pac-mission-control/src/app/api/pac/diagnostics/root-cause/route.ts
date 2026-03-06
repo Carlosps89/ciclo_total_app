@@ -107,7 +107,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const results = await runQuery(rcaQuery);
     
-    const data = results?.Rows?.slice(1).map(r => {
+    const data = results?.Rows?.slice(1).map((r: any) => {
       const d = r.Data || [];
       return {
         tag: d[0]?.VarCharValue,
@@ -124,9 +124,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const response = {
       terminal,
       days,
-      origins: data.filter(d => d.tag === 'ORIGIN').sort((a, b) => b.impact - a.impact),
-      products: data.filter(d => d.tag === 'PRODUCT').sort((a, b) => b.impact - a.impact),
-      trends: data.filter(d => d.tag === 'TREND')
+      origins: data.filter((d: any) => d.tag === 'ORIGIN').sort((a: any, b: any) => b.impact - a.impact),
+      products: data.filter((d: any) => d.tag === 'PRODUCT').sort((a: any, b: any) => b.impact - a.impact),
+      trends: data.filter((d: any) => d.tag === 'TREND')
     };
 
     return NextResponse.json(response);

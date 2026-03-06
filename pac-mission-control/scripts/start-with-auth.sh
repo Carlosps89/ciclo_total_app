@@ -33,5 +33,7 @@ if pgrep -f "next dev" > /dev/null; then
     # Mas se for manual, é útil. Para automação pura, poderíamos ignorar.
 else
     echo "[>] Iniciando NPM RUN DEV..."
+    export NVM_DIR="$HOME/.nvm"
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
     npm run dev
 fi
