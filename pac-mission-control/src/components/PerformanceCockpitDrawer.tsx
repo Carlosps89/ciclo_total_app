@@ -223,17 +223,17 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto, ini
                                         </span>
                                         <div className="flex items-baseline gap-1">
                                             <span className={clsx(
-                                                "text-7xl font-black tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-colors duration-500",
+                                                "text-6xl font-black tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-colors duration-500",
                                                 isSimulating ? "text-rose-400" : "text-white"
                                             )}>
                                                 {displayAvg.toFixed(1)}
                                             </span>
-                                            <span className="text-2xl font-black text-gray-500">H</span>
+                                            <span className="text-xl font-black text-gray-500">H</span>
                                         </div>
                                     </div>
 
-                                    <div className="absolute bottom-5 left-6 text-[11px] font-bold text-gray-700 uppercase tracking-widest italic">Ruim</div>
-                                    <div className="absolute bottom-5 right-6 text-[11px] font-bold text-gray-200 uppercase tracking-widest italic">Excelente</div>
+                                    <div className="absolute bottom-5 left-6 text-[9px] font-bold text-gray-700 uppercase tracking-widest italic">Ruim</div>
+                                    <div className="absolute bottom-5 right-6 text-[9px] font-bold text-gray-200 uppercase tracking-widest italic">Excelente</div>
                                 </div>
 
                                 {isSimulating && (
