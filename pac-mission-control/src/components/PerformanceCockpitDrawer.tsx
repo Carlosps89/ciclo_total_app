@@ -44,12 +44,24 @@ interface Props {
     onClose: () => void;
     terminal: string;
     produto?: string;
+    initialIsSimulating?: boolean;
 }
 
-export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: Props) {
+export function PerformanceCockpitDrawer({ open, onClose, terminal, produto, initialIsSimulating = false }: Props) {
     const [data, setData] = useState<PerformanceData | null>(null);
     const [loading, setLoading] = useState(false);
     const [expandedPraca, setExpandedPraca] = useState<string | null>(null);
+    
+    // Simulation State
+    const [isSimulating, setIsSimulating] = useState(initialIsSimulating);
+
+    useEffect(() => {
+        if (open && initialIsSimulating) {
+            setIsSimulating(true);
+        }
+    }, [open, initialIsSimulating]);
+    const [simDailyVol, setSimDailyVol] = useState(800);
+    const [simCycleTime, setSimCycleTime] = useState(35);
 
     useEffect(() => {
         if (!open) {
@@ -79,18 +91,38 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
 
     const summary = data?.summary;
     const meta = summary?.meta || 40;
-    const real = summary?.avg_h || 0;
+    const realAvg = summary?.avg_h || 0;
+    const realVol = summary?.total_volume || 0;
+
+    // Simulation Math
+    const now = new Date();
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const currentDay = now.getDate();
+    const daysRemaining = Math.max(0, lastDayOfMonth - currentDay);
     
-    // Attainment % (Atingimento)
-    // For Cycle time, we want real <= meta. 
-    const atingimento = real > 0 ? (meta / real) * 100 : 0;
+    const projectedVol = realVol + (daysRemaining * simDailyVol);
+    const projectedAvg = isSimulating 
+        ? ((realVol * realAvg) + (daysRemaining * simDailyVol * simCycleTime)) / Math.max(projectedVol, 1)
+        : realAvg;
+
+    // Reverse Math: What cycle do we need for the rest of the month to hit 40h?
+    // 40 = (realVol * realAvg + remVol * x) / (realVol + remVol)
+    // 40 * (realVol + remVol) - realVol * realAvg = remVol * x
+    // x = (40 * totalVol - realVol * realAvg) / remVol
+    const remVolTotal = daysRemaining * simDailyVol;
+    const neededCycleForMeta = remVolTotal > 0 
+        ? (meta * projectedVol - (realVol * realAvg)) / remVolTotal
+        : 0;
+
+    const displayAvg = isSimulating ? projectedAvg : realAvg;
+    const atingimento = displayAvg > 0 ? (meta / displayAvg) * 100 : 0;
     
     // Color Logic for Gauge (Matching Web Palette)
     const getGaugeColor = (pct: number) => {
-        if (pct >= 95) return '#10b981'; // Emerald
-        if (pct >= 85) return '#22c55e';  // Green
-        if (pct >= 75) return '#eab308';  // Yellow
-        if (pct >= 65) return '#f97316';  // Orange
+        if (pct >= 100) return '#10b981'; // Emerald (Strictly <= 40h)
+        if (pct >= 95) return '#22c55e';  // Green (Close to target)
+        if (pct >= 85) return '#eab308';  // Yellow
+        if (pct >= 75) return '#f97316';  // Orange
         return '#ef4444';                // Red
     };
 
@@ -113,10 +145,25 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                         <div>
                             <h2 className="text-xl font-black text-white tracking-tight uppercase italic leading-none flex items-center gap-2">
                                 Cockpit Premium
-                                <span className="bg-blue-600 text-[9px] not-italic px-1.5 py-0.5 rounded text-white tracking-widest font-black shadow-lg">V4.2</span>
+                                <span className="bg-blue-600 text-[9px] not-italic px-1.5 py-0.5 rounded text-white tracking-widest font-black shadow-lg">V4.5</span>
                             </h2>
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1 opacity-60">Performance • Mensal • {terminal}</p>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1 opacity-60">
+                                {isSimulating ? 'MODO SIMULAÇÃO ATIVO' : `Performance • Mensal • ${terminal}`}
+                            </p>
                         </div>
+                    </div>
+                    <div className="flex items-center gap-2 mr-2">
+                        <button 
+                            onClick={() => setIsSimulating(!isSimulating)}
+                            className={clsx(
+                                "text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border transition-all",
+                                isSimulating 
+                                    ? "bg-rose-500 border-rose-400 text-white shadow-[0_0_15px_rgba(244,63,94,0.4)]" 
+                                    : "bg-white/5 border-white/10 text-gray-400 hover:bg-white/10"
+                            )}
+                        >
+                            {isSimulating ? 'Sair da Simulação' : 'Simular Meta'}
+                        </button>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition text-gray-500 hover:text-white">
                         <X className="w-6 h-6" />
@@ -136,7 +183,7 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                             {/* CLEAN VELOCIMETER - NO NEEDLES, JUST PROGRESS */}
                             <section className="flex flex-col items-center py-10 relative">
                                 <div className="text-[11px] text-gray-400 font-black uppercase tracking-[0.4em] mb-4 opacity-70">
-                                    ATINGIMENTO: {atingimento.toFixed(1)}%
+                                    {isSimulating ? 'PROJEÇÃO FECHAMENTO' : 'ATINGIMENTO'}: {atingimento.toFixed(1)}%
                                 </div>
                                 
                                 <div className="relative w-80 h-44 group">
@@ -171,9 +218,16 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                     </svg>
                                     
                                     <div className="absolute inset-0 flex flex-col items-center justify-center pt-8">
-                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-1 opacity-60 italic">Média do Período</span>
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] mb-1 opacity-60 italic">
+                                            {isSimulating ? 'Média Projetada' : 'Média do Período'}
+                                        </span>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)]">{real.toFixed(1)}</span>
+                                            <span className={clsx(
+                                                "text-7xl font-black tracking-tighter drop-shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-colors duration-500",
+                                                isSimulating ? "text-rose-400" : "text-white"
+                                            )}>
+                                                {displayAvg.toFixed(1)}
+                                            </span>
                                             <span className="text-2xl font-black text-gray-500">H</span>
                                         </div>
                                     </div>
@@ -181,6 +235,50 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                                     <div className="absolute bottom-5 left-6 text-[11px] font-bold text-gray-700 uppercase tracking-widest italic">Ruim</div>
                                     <div className="absolute bottom-5 right-6 text-[11px] font-bold text-gray-200 uppercase tracking-widest italic">Excelente</div>
                                 </div>
+
+                                {isSimulating && (
+                                    <div className="mt-8 w-full max-w-sm space-y-8 p-6 bg-white/5 border border-white/10 rounded-3xl animate-in zoom-in-95 duration-300">
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Cargas Diárias (Futuro)</label>
+                                                <span className="text-sm font-black text-blue-400 font-sans">{simDailyVol}</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="100" max="1500" step="50"
+                                                value={simDailyVol}
+                                                onChange={(e) => setSimDailyVol(parseInt(e.target.value))}
+                                                className="w-full accent-blue-500 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-[10px] font-black text-white/40 uppercase tracking-widest">Ciclo Médio (Futuro)</label>
+                                                <span className="text-sm font-black text-rose-400 font-sans">{simCycleTime}h</span>
+                                            </div>
+                                            <input 
+                                                type="range" min="20" max="100" step="1"
+                                                value={simCycleTime}
+                                                onChange={(e) => setSimCycleTime(parseInt(e.target.value))}
+                                                className="w-full accent-rose-500 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                                            />
+                                        </div>
+
+                                        <div className="pt-4 border-t border-white/5">
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                                                    <TrendingUp className="w-4 h-4 text-emerald-500" />
+                                                </div>
+                                                <div>
+                                                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Necessidade Dia</span>
+                                                    <p className="text-xs text-gray-400 mt-1">
+                                                        Para fechar em <span className="text-white font-bold">40h</span>, as próximas <span className="text-white font-bold font-sans">{remVolTotal}</span> cargas precisam de média <span className="text-emerald-400 font-bold font-sans">{neededCycleForMeta > 0 ? neededCycleForMeta.toFixed(1) : '---'}h</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </section>
 
                             {/* DIAGNÓSTICO GRID */}
@@ -296,13 +394,16 @@ export function PerformanceCockpitDrawer({ open, onClose, terminal, produto }: P
                 </div>
 
                 <footer className="px-8 py-5 border-t border-white/5 bg-[#090b0d] flex flex-col items-center gap-4">
-                    <button 
-                        onClick={() => window.location.href = '/forecast'}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
-                    >
-                        <TrendingUp className="w-4 h-4" />
-                        Ver Previsão de Recuperação
-                    </button>
+                <button 
+                    onClick={() => {
+                        const pParam = produto ? `&produto=${encodeURIComponent(produto)}` : '';
+                        window.location.href = `/simulador?terminal=${terminal}${pParam}`;
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg flex items-center justify-center gap-2"
+                >
+                    <TrendingUp className="w-4 h-4" />
+                    Abrir Simulador Avançado
+                </button>
                     <p className="text-[10px] text-gray-800 font-black uppercase tracking-[0.6em] italic opacity-80">Intelligence Engine • Analytics v4.2</p>
                 </footer>
             </div>

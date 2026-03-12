@@ -40,7 +40,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden font-sans">
+    <div className="h-screen w-full flex items-center justify-center relative overflow-y-auto overflow-x-hidden font-sans custom-scrollbar bg-black">
       {/* Background Image with Blue Shadow Overlay */}
       <div 
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"

@@ -74,7 +74,7 @@ export default function UserManagementPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-8 font-sans">
+    <div className="h-screen bg-black text-white p-8 font-sans overflow-y-auto overflow-x-hidden custom-scrollbar">
       <div className="max-w-5xl mx-auto">
         <header className="flex justify-between items-center mb-12">
           <div className="flex items-center gap-4">

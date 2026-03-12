@@ -222,21 +222,22 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
     });
 
-    // Histogram - Fixed Buckets (0-1 ... 11-12, 12+)
-    const effectiveLimit = 12;
+    // Histogram - Fixed Buckets (0-2 ... 22-24, 24+)
+    const step = 2;
+    const effectiveLimit = 24;
     const dynamicHistogram: { bucket: string; count: number; pct: number }[] = [];
     
-    // 1. Buckets 0-12
-    for (let i = 0; i < effectiveLimit; i++) {
-      const count = hist_raw[i] || 0;
+    // 1. Buckets 0-24
+    for (let i = 0; i < effectiveLimit; i += step) {
+      const count = (hist_raw[i] || 0) + (hist_raw[i + 1] || 0);
       dynamicHistogram.push({
-        bucket: `${i}-${i + 1}`,
+        bucket: `${i}-${i + step}`,
         count: count,
         pct: total_early > 0 ? (count / total_early * 100) : 0
       });
     }
 
-    // 2. Overflow Bucket (12+)
+    // 2. Overflow Bucket (24+)
     let overflowCount = 0;
     Object.keys(hist_raw).forEach(key => {
       const bin = parseInt(key);
@@ -246,7 +247,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
 
     dynamicHistogram.push({
-      bucket: '12h+',
+      bucket: '24h+',
       count: overflowCount,
       pct: total_early > 0 ? (overflowCount / total_early * 100) : 0
     });

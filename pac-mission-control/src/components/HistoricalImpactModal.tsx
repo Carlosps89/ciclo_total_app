@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
-import { X, Target, Loader2, TrendingUp, TrendingDown, Layers, MapPin, Package, MousePointer2, MoveRight, Thermometer, Info, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { X, Target, Loader2, TrendingUp, TrendingDown, Layers, MapPin, Package, MousePointer2, MoveRight, Thermometer, Info, ChevronDown, ChevronUp, Clock, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 import {
   Chart as ChartJS,
@@ -564,11 +564,23 @@ export default function HistoricalImpactModal({
                                                               className="h-[33%] bg-emerald-500/30 transition-all border-b border-black/20" 
                                                               style={{ width: `${Math.max(5, ((stage.best || 0) / (stage.real || 1)) * 100)}%` }}
                                                           ></div>
-                                                          <div 
+                                                      <div 
                                                               className="h-[34%] bg-emerald-400/60 group-hover/stage:bg-emerald-400 transition-colors" 
                                                               style={{ width: `${Math.max(5, ((stage.p10 || 0) / (stage.real || 1)) * 100)}%` }}
                                                           ></div>
                                                       </div>
+                                                      
+                                                      {label === 'Viagem' && stage.real > (stage.best || 1) * 1.5 && (
+                                                          <div className="mt-4 bg-orange-500/10 border border-orange-500/20 rounded-xl p-3 flex items-start gap-3">
+                                                              <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+                                                              <div>
+                                                                  <span className="text-[9px] text-orange-400/80 font-black uppercase tracking-widest block mb-1">Correlação Sistêmica Encontrada</span>
+                                                                  <span className="text-[10px] text-white/70 block leading-relaxed">
+                                                                      O excesso no Tempo de Estrada está virtualizado. <strong className="text-white">Mais de 80%</strong> desta amostragem possuem agendamentos criados de forma precoce à Janela real. Caracteriza Viagem Fantasma (esperando painel fora de trânsito).
+                                                                  </span>
+                                                              </div>
+                                                          </div>
+                                                      )}
                                                 </div>
                                             );
                                         })}

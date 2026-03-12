@@ -11,12 +11,26 @@ import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDra
 import { SummaryResponse, CycleTotalResponse, OutliersResponse, AnticipationResponse, OutlierItem, CycleTotalBucket, PracaStatsResponse, PracaStatsItem } from '@/lib/types';
 
 interface DrillDownItem {
-  placa: string;
   gmo_id: string;
+  placa: string;
   origem: string;
   terminal: string;
+  produto: string; // added
   cheguei: string;
-  antecipacao_h: string;
+  antecipacao_h: number;
+  ciclo_h?: number;
+  
+  // Timestamps for OutlierItem compatibility
+  dt_emissao?: string;
+  dt_agendamento?: string;
+  dt_janela?: string;
+  dt_cheguei?: string;
+  dt_chamada?: string;
+  dt_chegada?: string;
+  dt_peso_saida?: string;
+  h_agendamento?: number;
+  h_viagem?: number;
+  h_interno?: number;
 }
 
 function DashboardContent() {
@@ -99,6 +113,7 @@ function DashboardContent() {
   const [selectedHourForAnalysis, setSelectedHourForAnalysis] = useState<number | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPerformanceOpen, setIsPerformanceOpen] = useState(false);
+  const [isSimulatingOnOpen, setIsSimulatingOnOpen] = useState(false);
   const [activeBucketDetails, setActiveBucketDetails] = useState<DrillDownItem[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailSearch, setDetailSearch] = useState('');
@@ -111,15 +126,19 @@ function DashboardContent() {
   const [selectedVehicle, setSelectedVehicle] = useState<OutlierItem | null>(null);
 
   // Fetch Drill-down
+  const [avgCicloH, setAvgCicloH] = useState<number | null>(null);
+
   const fetchBucketDetails = async (bucket: string) => {
     setLoadingDetails(true);
     setActiveBucketDetails([]);
+    setAvgCicloH(null);
     try {
         const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
         const res = await fetch(`/api/pac/antecipacoes/bucket-details?terminal=${terminal}&bucket=${encodeURIComponent(bucket)}${prodParam}`);
         if (res.ok) {
             const data = await res.json();
             setActiveBucketDetails(data.items || []);
+            setAvgCicloH(data.avg_ciclo_h ?? null);
         }
     } catch (error) {
         console.error("Failed to fetch details", error);
@@ -309,7 +328,7 @@ function DashboardContent() {
 
   if (mounted && isMobile) {
     return (
-      <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] min-h-screen font-sans animate-in fade-in duration-500 overflow-x-hidden">
+      <div className="flex flex-col gap-4 p-4 pb-24 bg-[#010b1a] h-screen font-sans animate-in fade-in duration-500 overflow-y-auto overflow-x-hidden custom-scrollbar">
         {/* MOBILE SIDE BAR */}
         {isMenuOpen && (
             <div className="fixed inset-0 z-100 flex">
@@ -473,8 +492,21 @@ function DashboardContent() {
                 <Activity className="w-4 h-4 text-blue-500 opacity-50" />
              </div>
           </button>
-          <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col">
-             <span className="text-[10px] uppercase font-bold text-gray-400 mb-2">Ciclo Médio Mês</span>
+          <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col group relative overflow-hidden">
+             <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] uppercase font-bold text-gray-400">Ciclo Médio Mês</span>
+                 <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsSimulatingOnOpen(true);
+                    setIsPerformanceOpen(true);
+                  }}
+                  className="p-1 px-1.5 bg-blue-500/10 active:bg-blue-500/30 border border-blue-500/20 rounded text-[8px] font-black text-blue-400 uppercase tracking-tighter flex items-center gap-1 transition-all animate-pulse"
+                >
+                  <TrendingUp className="w-2.5 h-2.5" />
+                  Simular
+                </button>
+             </div>
              <div className="flex items-center justify-between">
                 <span className="text-2xl font-black text-white">{fmtH(ciclo?.ciclo_total?.mes?.avg_h)}h</span>
                 <CalendarDays className="w-4 h-4 text-purple-500 opacity-50" />
@@ -586,9 +618,13 @@ function DashboardContent() {
 
         <PerformanceCockpitDrawer 
             open={isPerformanceOpen}
-            onClose={() => setIsPerformanceOpen(false)}
+            onClose={() => {
+                setIsPerformanceOpen(false);
+                setIsSimulatingOnOpen(false);
+            }}
             terminal={terminal}
             produto={selectedProduto}
+            initialIsSimulating={isSimulatingOnOpen}
         />
       </div>
     );
@@ -598,8 +634,8 @@ function DashboardContent() {
     <div
       data-testid="dashboard-cco"
       className={clsx(
-        "min-h-screen bg-[#050505] text-gray-200 p-4 font-sans selection:bg-blue-500/30 overflow-hidden flex flex-col gap-4 max-w-[100vw] overflow-x-hidden",
-        isTvMode ? "h-screen" : "h-auto"
+        "h-screen bg-[#050505] text-gray-200 p-4 font-sans selection:bg-blue-500/30 overflow-y-auto flex flex-col gap-4 max-w-[100vw] overflow-x-hidden custom-scrollbar",
+        isTvMode ? "" : ""
       )}>
       {/* WEB SIDE BAR (Shared Logic) */}
       {isMenuOpen && (
@@ -830,11 +866,26 @@ function DashboardContent() {
                   </div>
 
                   {/* HEADER */}
-                  <div className="flex flex-col z-10 gap-1">
-                    <span className="text-[10px] uppercase text-white/90 font-bold tracking-widest leading-none">
-                      {`Ciclo Total - ${b?.label || ''}`}
-                    </span>
-                    <MetaChip />
+                  <div className="flex justify-between items-start z-10 gap-1">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] uppercase text-white/90 font-bold tracking-widest leading-none">
+                        {`Ciclo Total - ${b?.label || ''}`}
+                      </span>
+                      <MetaChip />
+                    </div>
+                    {i === 2 && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsSimulatingOnOpen(true);
+                          setIsPerformanceOpen(true);
+                        }}
+                        className="p-1 px-2 bg-blue-500/10 hover:bg-blue-500/30 border border-blue-500/20 rounded text-[9px] font-black text-blue-400 uppercase tracking-tighter flex items-center gap-1 transition-all animate-pulse hover:animate-none"
+                      >
+                        <TrendingUp className="w-3 h-3" />
+                        Simular
+                      </button>
+                    )}
                   </div>
 
                   {/* BODY */}
@@ -892,8 +943,8 @@ function DashboardContent() {
 
           {/* 3. JANELAS CHART (Cheguei por Horário de Janela) - REPLACES 3 STAGE CARDS */}
           {anticipation?.window_bars && (
-            <div className="h-40 bg-gray-900/30 border border-gray-800 rounded-xl p-4 flex flex-col relative overflow-hidden w-full">
-              <div className="flex justify-between items-center z-10">
+            <div className="min-h-[220px] bg-gray-900/30 border border-gray-800 rounded-xl p-4 flex flex-col relative overflow-hidden w-full shrink-0">
+              <div className="flex justify-between items-start mb-2 z-10 w-full">
                 <div className="flex items-center gap-2">
                   <Clock className="w-5 h-5 text-blue-500" />
                   <span className="text-[10px] uppercase text-white/95 font-bold tracking-widest">
@@ -907,9 +958,9 @@ function DashboardContent() {
               </div>
 
               {/* BARS CONTAINER */}
-              <div className="flex-1 flex items-end gap-1 mt-2">
+              <div className="flex-1 flex items-end justify-between gap-1 w-full pb-5">
                 {/* HOJE (D) - 0 to 23 */}
-                <div className="flex-1 flex items-end justify-between gap-px h-full border-r border-gray-800 pr-2">
+                <div className="flex-1 flex items-end justify-between gap-px h-full border-r border-gray-800 pr-1">
                   {Array.from({ length: 24 }).map((_, h: number) => {
                     const rec = anticipation?.window_bars?.d0?.find((x) => x.hour === h);
                     const count: number = rec ? rec.count : 0;
@@ -942,9 +993,8 @@ function DashboardContent() {
                         <div className={`w-full rounded-t-sm transition-all duration-300 ${count > 0 ? 'bg-blue-500 hover:bg-blue-400' : 'bg-gray-800/10'}`}
                           style={{ height: count > 0 ? `${Math.max(pct, 5)}%` : '4px' }}>
                         </div>
-                        {/* Label every 3h or so */}
                         {h % 3 === 0 && (
-                          <span className="text-[8px] text-white/90 font-sans text-center mt-1 absolute -bottom-4 w-full">{h}</span>
+                          <span className="text-[8px] text-white/50 font-sans text-center mt-1 absolute -bottom-5 w-full">{h}h</span>
                         )}
                       </div>
                     );
@@ -952,7 +1002,7 @@ function DashboardContent() {
                 </div>
 
                 {/* AMANHÃ (D+1) - 0 to 23 */}
-                <div className="flex-1 flex items-end justify-between gap-px h-full pl-2">
+                <div className="flex-1 flex items-end justify-between gap-px h-full pl-1">
                   {Array.from({ length: 24 }).map((_, h: number) => {
                     const rec = anticipation?.window_bars?.d1?.find((x) => x.hour === h);
                     const count: number = rec ? rec.count : 0;
@@ -985,7 +1035,7 @@ function DashboardContent() {
                           style={{ height: count > 0 ? `${Math.max(pct, 5)}%` : '4px' }}>
                         </div>
                         {h % 3 === 0 && (
-                          <span className="text-[8px] text-white/90 font-sans text-center mt-1 absolute -bottom-4 w-full">{h}</span>
+                          <span className="text-[8px] text-white/50 font-sans text-center mt-1 absolute -bottom-5 w-full">{h}h</span>
                         )}
                       </div>
                     );
@@ -994,12 +1044,12 @@ function DashboardContent() {
               </div>
 
               {/* TOTAL D+1 LABEL */}
-              <div className="absolute bottom-2 right-4 z-20 pointer-events-none flex flex-col items-end gap-0.5">
-                <span className="text-[10px] font-sans font-bold text-blue-400 opacity-100">
-                  TOTAL D: {anticipation?.window_bars?.d0_total || 0} caminhões
+              <div className="absolute top-4 right-4 z-20 pointer-events-none flex flex-col items-end gap-0.5 opacity-60">
+                <span className="text-[9px] font-sans font-bold text-blue-400">
+                  TOTAL D: {anticipation?.window_bars?.d0_total || 0}
                 </span>
-                <span className="text-[10px] font-sans font-bold text-purple-400 opacity-100">
-                  TOTAL D+1: {anticipation?.window_bars?.d1_total || 0} caminhões
+                <span className="text-[9px] font-sans font-bold text-purple-400">
+                  TOTAL D+1: {anticipation?.window_bars?.d1_total || 0}
                 </span>
               </div>
             </div>
@@ -1043,7 +1093,7 @@ function DashboardContent() {
                    <div className="h-8 flex items-center justify-end">
                      {(selectedBucket || hoverBucket) ? (
                         <div className="flex items-center gap-3 bg-gray-800/50 border border-gray-700 rounded px-3 py-1 animate-in fade-in zoom-in-95 duration-200">
-                           <span className="text-[10px] text-white/70 uppercase">Bucket <span className="text-white font-bold font-sans">{(selectedBucket || hoverBucket)?.bucket}</span></span>
+                           <span className="text-[10px] text-white/70 uppercase">Entre <span className="text-white font-bold font-sans">{(selectedBucket || hoverBucket)?.bucket}</span> horas</span>
                            <div className="w-px h-3 bg-gray-700"></div>
                            <span className="text-[10px] text-blue-300 font-bold font-sans">{(selectedBucket || hoverBucket)?.count} <span className="text-white/70 font-normal">veículos</span></span>
                            <span className="text-[10px] text-gray-400 font-sans">({(selectedBucket || hoverBucket)?.pct.toFixed(1)}%)</span>
@@ -1058,12 +1108,31 @@ function DashboardContent() {
                 </div>
               </div>
 
-              {/* Chart Area */}
+               {/* Chart Area */}
               <div className="flex-1 flex items-end justify-between gap-3 h-32 px-2 pb-6 relative">
                 {anticipation?.histogram?.map((h: { bucket: string; count: number; pct: number }, i: number) => {
                   const maxVal: number = Math.max(...(anticipation?.histogram.map(x => x.count) || [1]), 1);
                   const barHeightPct: number = h.count > 0 ? (h.count / maxVal) * 100 : 0;
                   const isActive = selectedBucket?.bucket === h.bucket;
+
+                  // Determine color based on bucket
+                  const startHour = parseInt(h.bucket.split('-')[0] || '24');
+                  let colorClass = 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)] group-hover:bg-blue-400 group-hover:shadow-[0_0_15px_rgba(59,130,246,0.6)]';
+                  let activeColorClass = 'bg-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.8)]';
+                  let activeBorderClass = 'border-blue-500/50';
+                  let textClass = 'text-blue-400';
+
+                  if (startHour >= 12) {
+                    colorClass = 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.3)] group-hover:bg-rose-400 group-hover:shadow-[0_0_15px_rgba(244,63,94,0.6)]';
+                    activeColorClass = 'bg-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.8)]';
+                    activeBorderClass = 'border-rose-500/50';
+                    textClass = 'text-rose-400';
+                  } else if (startHour >= 4) {
+                    colorClass = 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.3)] group-hover:bg-purple-400 group-hover:shadow-[0_0_15px_rgba(168,85,247,0.6)]';
+                    activeColorClass = 'bg-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.8)]';
+                    activeBorderClass = 'border-purple-500/50';
+                    textClass = 'text-purple-400';
+                  }
 
                   return (
                     <div 
@@ -1090,16 +1159,16 @@ function DashboardContent() {
                       )}
 
                       {/* Bar Track + Fill */}
-                      <div className={`w-full rounded-t-sm relative transition-all duration-300 flex flex-col justify-end overflow-hidden border-b ${isActive ? 'bg-gray-800/80 border-blue-500/50' : 'bg-gray-800/30 border-gray-700 hover:bg-gray-800/50'}`} style={{ height: '100%' }}>
+                      <div className={`w-full rounded-t-sm relative transition-all duration-300 flex flex-col justify-end overflow-hidden border-b ${isActive ? `bg-gray-800/80 ${activeBorderClass}` : 'bg-gray-800/30 border-gray-700 hover:bg-gray-800/50'}`} style={{ height: '100%' }}>
                         <div
-                          className={`w-full transition-all duration-500 relative ${isActive ? 'bg-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.8)]' : 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)] group-hover:bg-blue-400 group-hover:shadow-[0_0_15px_rgba(59,130,246,0.6)]'}`}
+                          className={`w-full transition-all duration-500 relative ${isActive ? activeColorClass : colorClass}`}
                           style={{ height: `${h.count > 0 ? Math.max(barHeightPct, 1) : 0}%` }}
                         />
                       </div>
 
                       {/* X-Axis Label */}
                       <div className="absolute -bottom-6 w-full text-center">
-                        <div className={`text-[9px] font-sans uppercase truncate px-0.5 py-1 transition-colors cursor-default ${isActive ? 'text-blue-400 font-bold' : 'text-white/90 hover:text-white'}`} title={h.bucket}>
+                        <div className={`text-[9px] font-sans uppercase truncate px-0.5 py-1 transition-colors cursor-default ${isActive ? `${textClass} font-bold` : 'text-white/90 hover:text-white'}`} title={`${h.bucket} horas`}>
                           {h.bucket}
                         </div>
                       </div>
@@ -1183,6 +1252,17 @@ function DashboardContent() {
 
         <div className="flex-1 flex flex-col min-h-0">
            <div className="p-4 border-b border-gray-800 space-y-3">
+              {/* Avg Ciclo Badge */}
+              {avgCicloH !== null && avgCicloH > 0 && (
+                <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 flex justify-between items-center mb-2 shadow-inner">
+                    <span className="text-[10px] uppercase text-blue-200 font-bold tracking-widest">Tempo de Ciclo Médio da Barra</span>
+                    <div className="flex items-baseline gap-1 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                        <span className="text-sm font-black text-blue-400 font-sans">{fmtH(avgCicloH)}</span>
+                        <span className="text-[10px] text-blue-300">h</span>
+                    </div>
+                </div>
+              )}
+
               <input 
                  type="text" 
                  placeholder="Buscar placa, GMO ou origem..." 
@@ -1216,21 +1296,63 @@ function DashboardContent() {
                             item.origem?.toLowerCase().includes(s);
                   })
                   .map((item: DrillDownItem, idx: number) => (
-                    <div key={idx} className="p-3 bg-gray-900/20 border border-gray-800/50 rounded hover:bg-gray-800/50 transition group flex flex-col gap-1">
+                    <div 
+                      key={idx} 
+                      onClick={() => {
+                         const totalSoma = (item.h_agendamento || 0) + (item.h_viagem || 0) + (item.h_interno || 0);
+                         
+                         let piorEtapa = "Ciclo Logístico Geral";
+                         if (totalSoma > 0) {
+                             const maxH = Math.max((item.h_agendamento || 0), (item.h_viagem || 0), (item.h_interno || 0));
+                             if (maxH === item.h_agendamento) piorEtapa = "Aguardando Agendamento";
+                             else if (maxH === item.h_viagem) piorEtapa = "Tempo de Viagem";
+                             else if (maxH === item.h_interno) piorEtapa = "Ciclo Interno";
+                         }
+
+                         setSelectedVehicle({
+                           ...item,
+                           etapa: piorEtapa, // Calculate largest block
+                           valor_h: totalSoma > 0 ? totalSoma : (item.ciclo_h || item.antecipacao_h || 0),
+                           updated_at: new Date().toISOString()
+                         } as unknown as OutlierItem);
+                      }}
+                      className="p-3 bg-gray-900/20 border border-gray-800/50 rounded hover:bg-gray-800/50 hover:border-blue-500/30 transition-all group flex flex-col gap-1 relative overflow-hidden cursor-pointer shadow-sm hover:shadow-md"
+                    >
                        <div className="flex justify-between items-start">
-                          <span className="font-bold text-white font-sans">{item.placa}</span>
-                          <span className="text-xs font-bold text-blue-400 font-sans">{item.antecipacao_h}h</span>
+                          <div className="flex flex-col">
+                             <span className="font-bold text-white font-sans text-lg">{item.placa}</span>
+                             <div className="flex items-center gap-1.5 mt-0.5">
+                                 <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">{item.produto}</span>
+                                 <span className="text-[10px] text-white/40 font-mono">#{item.gmo_id}</span>
+                             </div>
+                          </div>
+                          
+                          <div className="flex flex-col items-end">
+                             <span className="text-xl font-black text-blue-400 font-sans leading-none">{item.antecipacao_h}h</span>
+                             <span className="text-[8px] uppercase font-bold text-blue-500/50 mt-1">Antecipação</span>
+                          </div>
                        </div>
-                       <div className="flex justify-between items-center text-[10px] text-white/60 font-sans">
+                       
+                       <div className="flex justify-between items-center text-[10px] text-white/60 font-sans mt-2">
                           <span className="truncate max-w-[150px]">{item.origem}</span>
                           <div className="flex items-center gap-1">
                              <span>{item.cheguei ? item.cheguei.split(' ')[1] : '--:--'}</span>
-                             <ChevronRight className="w-3 h-3 opacity-50" />
+                             <ChevronRight className="w-3 h-3 opacity-50 text-blue-500" />
                           </div>
                        </div>
-                       <div className="mt-1 pt-1 border-t border-gray-800/50 flex justify-between items-center">
-                          <span className="text-[9px] text-white/40 font-mono">#{item.gmo_id}</span>
-                          <span className="text-[9px] text-white/40">{item.terminal}</span>
+                       
+                       <div className="mt-2 pt-2 border-t border-gray-800/50 flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] text-white/50">{item.terminal}</span>
+                          </div>
+                          
+                          {/* Métrica de Ciclo Total Individual */}
+                          {item.ciclo_h != null && !isNaN(item.ciclo_h) && (
+                            <div className="flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 transition-colors group-hover:bg-blue-500/20 group-hover:border-blue-500/40" title="Tempo total do ciclo na planta operacional (Horas)">
+                              <Activity className="w-3 h-3 text-blue-400" />
+                              <span className="text-[11px] font-bold text-white font-sans">{fmtH(item.ciclo_h)}h</span>
+                            </div>
+                          )}
                        </div>
                     </div>
                   ))
@@ -1455,6 +1577,17 @@ function DashboardContent() {
           </div>
         </div>
       )}
+
+      <PerformanceCockpitDrawer 
+          open={isPerformanceOpen}
+          onClose={() => {
+              setIsPerformanceOpen(false);
+              setIsSimulatingOnOpen(false);
+          }}
+          terminal={terminal}
+          produto={selectedProduto}
+          initialIsSimulating={isSimulatingOnOpen}
+      />
     </div>
   );
 }

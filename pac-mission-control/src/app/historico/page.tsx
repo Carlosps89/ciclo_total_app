@@ -186,7 +186,7 @@ function HistoricalContent() {
   );
 
   return (
-    <div className="min-h-screen bg-[#050505] text-gray-200 p-6 font-sans flex flex-col gap-6">
+    <div className="h-screen bg-[#050505] text-gray-200 p-6 font-sans flex flex-col gap-6 overflow-y-auto overflow-x-hidden custom-scrollbar">
       {/* HEADER */}
       <header className="flex justify-between items-start border-b border-gray-800 pb-4 shrink-0">
         <div className="flex flex-col gap-2">

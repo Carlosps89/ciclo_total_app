@@ -52,6 +52,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         ${map.terminal} as _col_terminal,
         ${map.placa} as _col_placa,
         ${map.origem} as _col_origem,
+        ${map.produto} as _col_produto,
+        coalesce(${map.dt_emissao}, ${map.dt_agendamento}) as _col_emissao,
+        coalesce(${map.dt_chamada}, ${map.dt_cheguei}) as _col_chamada,
         ${map.dt_agendamento} as _col_agendamento,
         ${map.dt_chegada} as _col_chegada,
         ${map.dt_peso_saida} as _col_peso_saida,
@@ -104,17 +107,25 @@ export async function GET(request: Request): Promise<NextResponse> {
               _col_placa as placa_tracao,
               _col_origem as origem,
               _col_terminal as terminal,
+              _col_produto as produto,
+              _col_chamada as dt_chamada,
               try_cast(_col_peso_saida as timestamp) as peso_saida,
               try_cast(_col_cheguei as timestamp) as cheguei,
+              try_cast(_col_chegada as timestamp) as chegada,
               try_cast(_col_janela as timestamp) as janela_agendamento,
-              try_cast(_col_agendamento as timestamp) as dt_agendamento
+              try_cast(_col_agendamento as timestamp) as dt_agendamento,
+              try_cast(_col_emissao as timestamp) as dt_emissao
           FROM dedupped
       )
       , arrivals_today AS (
           SELECT 
             *,
             CASE WHEN cheguei < janela_agendamento THEN 1 END as is_early,
-            date_diff('second', cheguei, janela_agendamento) / 3600.0 as hours_early
+            date_diff('second', cheguei, janela_agendamento) / 3600.0 as hours_early,
+            date_diff('second', dt_emissao, coalesce(peso_saida, timestamp '${brt.full}')) / 3600.0 as ciclo_h,
+            date_diff('second', dt_emissao, dt_agendamento) / 3600.0 as h_agendamento,
+            date_diff('second', dt_agendamento, cheguei) / 3600.0 as h_viagem,
+            date_diff('second', chegada, coalesce(peso_saida, timestamp '${brt.full}')) / 3600.0 as h_interno
           FROM calc
           WHERE cheguei >= timestamp '${startDay}' 
             AND cheguei <= timestamp '${endNextDay}'
@@ -126,7 +137,19 @@ export async function GET(request: Request): Promise<NextResponse> {
         origem,
         terminal,
         format_datetime(cheguei, 'dd/MM HH:mm') as cheguei_fmt,
-        cast(hours_early as decimal(10,1)) as antecipacao_h
+        cast(hours_early as decimal(10,1)) as antecipacao_h,
+        cast(ciclo_h as decimal(10,1)) as ciclo_h,
+        produto,
+        cast(dt_emissao as varchar) as dt_emissao,
+        cast(dt_agendamento as varchar) as dt_agendamento,
+        cast(janela_agendamento as varchar) as dt_janela,
+        cast(cheguei as varchar) as dt_cheguei,
+        cast(dt_chamada as varchar) as dt_chamada,
+        cast(chegada as varchar) as dt_chegada,
+        cast(peso_saida as varchar) as dt_peso_saida,
+        cast(h_agendamento as decimal(10,1)) as h_agendamento,
+        cast(h_viagem as decimal(10,1)) as h_viagem,
+        cast(h_interno as decimal(10,1)) as h_interno
       FROM arrivals_today
       WHERE is_early = 1 
         AND ${bucketFilter}
@@ -141,6 +164,12 @@ export async function GET(request: Request): Promise<NextResponse> {
         Data?: { VarCharValue?: string }[];
     }
 
+    function safeParseFloat(val: string | undefined): number | undefined {
+        if (!val) return undefined;
+        const n = parseFloat(val);
+        return isNaN(n) ? undefined : n;
+    }
+
     const items = rows.map((r: AthenaRow) => {
       const data: string[] = r.Data?.map((d: { VarCharValue?: string }) => d.VarCharValue || '') || [];
       return {
@@ -149,15 +178,49 @@ export async function GET(request: Request): Promise<NextResponse> {
         origem: data[2],
         terminal: data[3],
         cheguei: data[4],
-        antecipacao_h: data[5]
+        antecipacao_h: parseFloat(data[5] || '0'), 
+        ciclo_h: data[6] ? parseFloat(data[6]) : null,
+        produto: data[7],
+        dt_emissao: data[8],
+        dt_agendamento: data[9],
+        dt_janela: data[10],
+        dt_cheguei: data[11],
+        dt_chamada: data[12],
+        dt_chegada: data[13],
+        dt_peso_saida: data[14],
+        h_agendamento: safeParseFloat(data[15]),
+        h_viagem: safeParseFloat(data[16]),
+        h_interno: safeParseFloat(data[17])
       };
     });
+
+    let avg_ciclo_h = 0;
+    let validCycleCount = 0;
+    items.forEach(item => {
+      // Calculate true cycle manually on JS side for safety if SQL is missing
+      const trueCycle = (item.h_agendamento || 0) + (item.h_viagem || 0) + (item.h_interno || 0);
+      
+      if (trueCycle > 0) {
+         avg_ciclo_h += trueCycle;
+         validCycleCount++;
+         // Override the returned ciclo_h for the frontend display
+         item.ciclo_h = trueCycle;
+      } else if (item.ciclo_h !== null && !isNaN(item.ciclo_h)) {
+         avg_ciclo_h += item.ciclo_h;
+         validCycleCount++;
+      }
+    });
+
+    if (validCycleCount > 0) {
+      avg_ciclo_h = avg_ciclo_h / validCycleCount;
+    }
 
     return NextResponse.json({
       terminal,
       bucket,
       count_loaded: items.length,
       limit,
+      avg_ciclo_h,
       items
     });
 

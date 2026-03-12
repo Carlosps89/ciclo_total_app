@@ -340,7 +340,7 @@ function ForecastContent() {
   }
 
   return (
-    <div className="h-screen bg-[#010b1a] text-white font-sans overflow-hidden flex flex-col p-8">
+    <div className="h-screen bg-[#010b1a] text-white font-sans overflow-y-auto overflow-x-hidden flex flex-col p-8">
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

@@ -111,6 +111,7 @@ export function getCleanMap(columns: string[]): Record<string, string> {
     evento: find(['evento', 'event', 'desc', 'ds_evento']) || 'evento',
     situacao: find(['situacao', 'status', 'ds_situacao']) || 'situacao',
     produto: find(['produto', 'mercadoria', 'material']) || 'produto',
+    ts_ult: find(['ts_ult', 'dh_inclusao', 'updated_at']) || 'ts_ult',
     
     gmo_id: rawMap.id || find(['gmo_id', 'id']) || 'gmo_id',
     placa_cavalo: find(['placa', 'tracao']) || 'placa_tracao',

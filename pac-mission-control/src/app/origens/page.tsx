@@ -146,7 +146,7 @@ function OrigensContent() {
   const avgCycle = totalVolume > 0 ? (totalAccumulatedHours / totalVolume) : 0;
 
   return (
-    <div className="h-screen bg-[#050505] text-gray-200 font-sans selection:bg-green-500/30 overflow-hidden flex flex-col relative">
+    <div className="h-screen w-full bg-[#050505] text-gray-200 font-sans selection:bg-green-500/30 overflow-y-auto overflow-x-hidden flex flex-col relative custom-scrollbar">
       
       {/* BACKGROUND MAP (MAIN HERO) */}
       <div className="absolute inset-0 z-0 bg-gray-900">
