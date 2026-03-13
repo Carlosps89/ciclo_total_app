@@ -3,6 +3,7 @@ import { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, Get
 const outputLocation = process.env.ATHENA_OUTPUT_S3;
 
 import { fromIni } from "@aws-sdk/credential-providers";
+import { refreshAWSSession } from "./aws-auth-service";
 
 // Ensure region is set, defaulting to sa-east-1 if not provided
 const client = new AthenaClient({
@@ -14,7 +15,7 @@ export const ATHENA_DATABASE = process.env.ATHENA_DATABASE || "db_gmo_trusted";
 export const ATHENA_VIEW = process.env.ATHENA_VIEW || "vw_ciclo_v2";
 export const ATHENA_WORKGROUP = process.env.ATHENA_WORKGROUP || "athena_workgroup";
 
-export async function runQuery(query: string): Promise<any | undefined> {
+export async function runQuery(query: string, retryCount = 0): Promise<any | undefined> {
     if (!outputLocation) {
         throw new Error("ATHENA_OUTPUT_S3 is not defined");
     }
@@ -85,15 +86,22 @@ export async function runQuery(query: string): Promise<any | undefined> {
         };
     } catch (error: unknown) {
         console.error("!!! [Athena] ERRO DE EXECUÇÃO !!!");
-        console.error("Query:", query.substring(0, 200) + "...");
-        console.error("Error Detail:", error);
-
+        
         const err = error as { name?: string; message?: string };
-        // Handle SSO Expiration specifically
-        if (err?.name === 'CredentialsProviderError' || err?.message?.includes('Token is expired') || err?.message?.includes('ExpiredToken')) {
-            throw new Error("AWS_SSO_EXPIRED: Token expired. Run 'aws sso login --profile rumo-sso' locally.");
+        const isAuthError = err?.name === 'CredentialsProviderError' || 
+                           err?.message?.includes('Token is expired') || 
+                           err?.message?.includes('ExpiredToken');
+
+        if (isAuthError && retryCount === 0) {
+            console.warn("[Athena] Token expirado detectado. Tentando refresh automático...");
+            const refreshed = await refreshAWSSession("rumo-sso");
+            if (refreshed) {
+                console.info("[Athena] Sessão renovada. Retentando query...");
+                return runQuery(query, 1);
+            }
         }
 
+        console.error("Error Detail:", error);
         throw error;
     }
 }
