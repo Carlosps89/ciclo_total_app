@@ -8,7 +8,11 @@ import { refreshAWSSession } from "./aws-auth-service";
 // Ensure region is set, defaulting to sa-east-1 if not provided
 const client = new AthenaClient({
     region: process.env.AWS_REGION || "sa-east-1",
-    credentials: fromIni({ profile: "rumo-sso" }),
+    credentials: process.env.AWS_ACCESS_KEY_ID ? {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        sessionToken: process.env.AWS_SESSION_TOKEN
+    } : fromIni({ profile: "rumo-sso" }),
 });
 
 export const ATHENA_DATABASE = process.env.ATHENA_DATABASE || "db_gmo_trusted";
