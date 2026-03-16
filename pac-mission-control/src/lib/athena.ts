@@ -93,8 +93,10 @@ export async function runQuery(query: string, retryCount = 0): Promise<any | und
         
         const err = error as { name?: string; message?: string };
         const isAuthError = err?.name === 'CredentialsProviderError' || 
+                           err?.name === 'AccessDeniedException' ||
                            err?.message?.includes('Token is expired') || 
-                           err?.message?.includes('ExpiredToken');
+                           err?.message?.includes('ExpiredToken') ||
+                           err?.message?.includes('not authorized to perform');
 
         if (isAuthError && retryCount === 0) {
             console.warn("[Athena] Token expirado detectado. Tentando refresh automático...");
