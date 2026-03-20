@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_VIEW, ATHENA_DATABASE } from '@/lib/athena';
-import { getCleanMap } from '@/lib/athena-sql';
+import { runQuery, ATHENA_VIEW, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
 import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
 
@@ -12,14 +11,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     const terminal: string = searchParams.get('terminal') || 'TRO';
     const cacheKey: string = `pac_produtos_v1_${terminal}`;
 
-    // Check Cache
-    const cachedData: unknown = getCached(cacheKey);
+    const cachedData = getCached<any>(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    // Build schema map
-    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-      .then((cols: string[]) => getCleanMap(cols));
+    // Build schema map (Cached separately for 6h in lib/athena)
+    const map: Record<string, string> = await getSchemaMap();
 
     const query: string = `
       SELECT DISTINCT ${map.produto} as produto

@@ -14,6 +14,7 @@ export interface SummaryResponse {
         panel_updated_at_brt: string;
         aws_last_peso_saida_brt: string | null;
         aws_last_cheguei_brt: string | null;
+        athena_cache_expires_at?: string;
     };
     stages: {
         aguardando_agendamento: CycleStage;

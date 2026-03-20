@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
 
 // Helper to get BRT components (Same as in ciclo-total)
@@ -22,6 +23,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     
     // Default limit
     const limit = 50;
+
+    const cacheKey = `pac_antecip_bucket_v2_${terminal}_${bucket}_${produto || 'all'}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
 
     if (!bucket) {
         return NextResponse.json({ error: 'Bucket Required' }, { status: 400 });
@@ -215,14 +220,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       avg_ciclo_h = avg_ciclo_h / validCycleCount;
     }
 
-    return NextResponse.json({
+    const response = {
       terminal,
       bucket,
       count_loaded: items.length,
       limit,
       avg_ciclo_h,
       items
-    });
+    };
+
+    setCached(cacheKey, response);
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error("Anticipation Details API Error:", error);

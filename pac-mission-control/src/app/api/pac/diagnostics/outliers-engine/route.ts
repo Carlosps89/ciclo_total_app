@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 
@@ -39,6 +40,12 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // Filters
     const offenderFilter = searchParams.get('offenderFilter') || '';
+    const cacheKey: string = `pac_diag_outliers_engine_v5_${terminal}_${produto || 'all'}_${praca || 'all'}_${startDate}_${endDate}_${iqrMultiplier}`;
+    
+    // Check Cache
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
+
     const whitelistStr = searchParams.get('whitelist') || '';
 
     const TARGET_VIEW: string = 'VW_Ciclo';
@@ -265,12 +272,15 @@ export async function GET(request: Request): Promise<NextResponse> {
       };
     });
 
-    return NextResponse.json({
+    const response = {
       simulation,
       thresholds,
       histograms,
       patterns
-    });
+    };
+
+    setCached(cacheKey, response); // Uses NEW 15 min DEFAULT_TTL
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error("Outliers API Error:", error);

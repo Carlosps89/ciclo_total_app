@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         const { searchParams }: URL = new URL(request.url);
         const terminal: string = searchParams.get('terminal') || 'TRO';
 
+        const now: Date = new Date();
+        const brt = getBRTComponents(now);
+
+        const cacheKey = `pac_debug_d1_v2_${terminal}_${brt.ymd}`;
+        const cachedData = getCached(cacheKey);
+        if (cachedData) return NextResponse.json(cachedData);
+
         const TARGET_VIEW: string = 'VW_Ciclo';
 
         // Cast to any to avoid strict type checks on dynamic map properties
@@ -26,8 +34,6 @@ export async function GET(request: Request): Promise<NextResponse> {
             .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
             .then((cols: string[]) => getCleanMap(cols));
 
-        const now: Date = new Date();
-        const brt = getBRTComponents(now);
         const startDay: string = `${brt.ymd} 00:00:00`;
         const endDay: string = `${brt.ymd} 23:59:59`;
 
@@ -257,15 +263,18 @@ export async function GET(request: Request): Promise<NextResponse> {
             }
         });
 
-        return NextResponse.json({
-            now_brt: brt.full,
-            summary,
-            universe,
-            status_stats,
-            breakdown,
-            sample_count: sample.length,
-            sample
-        });
+    const response = {
+      now_brt: brt.full,
+      summary,
+      universe,
+      status_stats,
+      breakdown,
+      sample_count: sample.length,
+      sample
+    };
+
+    setCached(cacheKey, response);
+    return NextResponse.json(response);
 
     } catch (error) {
         console.error("Debug API Error:", error);

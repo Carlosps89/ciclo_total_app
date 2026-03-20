@@ -1,41 +1,79 @@
 import { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand, GetQueryResultsCommand } from "@aws-sdk/client-athena";
 
-const outputLocation = process.env.ATHENA_OUTPUT_S3;
+const getOutputLocation = () => process.env.ATHENA_OUTPUT_S3;
 
 import { fromIni } from "@aws-sdk/credential-providers";
 import { refreshAWSSession } from "./aws-auth-service";
+import { getCached, setCached } from "./cache";
+import { getCleanMap } from "./athena-sql";
+import { ResultSet } from "@aws-sdk/client-athena";
 
-// Ensure region is set, defaulting to sa-east-1 if not provided
-const client = new AthenaClient({
-    region: process.env.AWS_REGION || "sa-east-1",
-    credentials: process.env.AWS_ACCESS_KEY_ID ? {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        sessionToken: process.env.AWS_SESSION_TOKEN
-    } : fromIni({ profile: "rumo-sso" }),
-});
+let client: AthenaClient | null = null;
 
-export const ATHENA_DATABASE = process.env.ATHENA_DATABASE || "db_gmo_trusted";
-export const ATHENA_VIEW = process.env.ATHENA_VIEW || "vw_ciclo_v2";
-export const ATHENA_WORKGROUP = process.env.ATHENA_WORKGROUP || "athena_workgroup";
+function getClient() {
+    if (!client) {
+        const region = process.env.AWS_REGION || "us-east-1";
+        const profile = process.env.AWS_PROFILE || "rumo-sso";
+        
+        console.log(`[Athena] Inicializando cliente na região ${region} com perfil ${profile}`);
+        
+        client = new AthenaClient({
+            region: region,
+            credentials: process.env.AWS_ACCESS_KEY_ID ? {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+                sessionToken: process.env.AWS_SESSION_TOKEN
+            } : fromIni({ profile: profile }),
+        });
+    }
+    return client;
+}
+
+export const getAthenaDatabase = () => process.env.ATHENA_DATABASE || "db_gmo_trusted";
+export const getAthenaView = () => process.env.ATHENA_VIEW || "vw_ciclo_v2";
+export const getAthenaWorkgroup = () => process.env.ATHENA_WORKGROUP || "athena_workgroup";
+
+export const ATHENA_DATABASE = getAthenaDatabase();
+export const ATHENA_VIEW = getAthenaView();
+
+export async function getSchemaMap(targetView: string = ATHENA_VIEW): Promise<Record<string, string>> {
+    const cacheKey = `schema_map_v2_${targetView}`;
+    const cached = getCached<Record<string, string>>(cacheKey);
+    if (cached) return cached;
+
+    console.log(`[Athena] [Cache-Miss] Buscando mapeamento de esquema para: ${targetView}`);
+    const result: ResultSet | undefined = await runQuery(`SELECT * FROM "${getAthenaDatabase()}"."${targetView}" LIMIT 0`);
+    const cols = result?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [];
+    const map = getCleanMap(cols);
+    
+    // Cache for 6 hours (schema changes are rare)
+    setCached(cacheKey, map, 6 * 60 * 60 * 1000);
+    return map;
+}
+
 
 export async function runQuery(query: string, retryCount = 0): Promise<any | undefined> {
+    const outputLocation = getOutputLocation();
     if (!outputLocation) {
         throw new Error("ATHENA_OUTPUT_S3 is not defined");
     }
 
     try {
+        // Tagging query for easier filtering in AWS Console
+        const taggedQuery = `-- APP:CCO_Rodo\n${query}`;
+
         const start = new StartQueryExecutionCommand({
-            QueryString: query,
-            QueryExecutionContext: { Database: ATHENA_DATABASE },
+            QueryString: taggedQuery,
+            QueryExecutionContext: { Database: getAthenaDatabase() },
             ResultConfiguration: { OutputLocation: outputLocation },
-            WorkGroup: ATHENA_WORKGROUP,
+            WorkGroup: getAthenaWorkgroup(),
         });
 
-        const { QueryExecutionId } = await client.send(start);
+        const { QueryExecutionId } = await getClient().send(start);
         if (!QueryExecutionId) throw new Error("Failed to start query");
         
-        console.log(`[Athena] Query Iniciada: ${QueryExecutionId}`);
+        const now = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
+        console.log(`[${now}] [Athena] Query Iniciada: ${QueryExecutionId}`);
 
         // Poll for completion
         let status = "QUEUED";
@@ -43,7 +81,7 @@ export async function runQuery(query: string, retryCount = 0): Promise<any | und
         while (status === "QUEUED" || status === "RUNNING") {
             pollCount++;
             await new Promise((resolve) => setTimeout(resolve, 1000)); // Poll every 1s
-            const { QueryExecution } = await client.send(
+            const { QueryExecution } = await getClient().send(
                 new GetQueryExecutionCommand({ QueryExecutionId })
             );
             status = QueryExecution?.Status?.State || "FAILED";
@@ -59,7 +97,8 @@ export async function runQuery(query: string, retryCount = 0): Promise<any | und
             }
         }
 
-        console.log(`[Athena] Query ${QueryExecutionId} FINALIZADA com sucesso.`);
+        const endNow = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date());
+        console.log(`[${endNow}] [Athena] Query ${QueryExecutionId} FINALIZADA com sucesso.`);
 
         // Get results with pagination to handle > 1000 rows
         let nextToken: string | undefined = undefined;
@@ -71,7 +110,7 @@ export async function runQuery(query: string, retryCount = 0): Promise<any | und
                 QueryExecutionId,
                 NextToken: nextToken
             });
-            const res: any = await client.send(command);
+            const res: any = await getClient().send(command);
 
             if (!resultSetMetadata && res.ResultSet?.ResultSetMetadata) {
                 resultSetMetadata = res.ResultSet.ResultSetMetadata;

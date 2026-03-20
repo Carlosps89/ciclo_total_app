@@ -73,6 +73,7 @@ function DashboardContent() {
   const [mounted, setMounted] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [refreshCounter, setRefreshCounter] = useState<number>(0);
+  const [athenaCountdown, setAthenaCountdown] = useState<string>('00:00');
 
   // Responsive Check & Mounting
   useEffect(() => {
@@ -264,6 +265,7 @@ function DashboardContent() {
     if (!autoRefresh) return;
     
     const timer = setInterval(() => {
+      // Auto-refresh countdown (60s local polling)
       setCountdown(prev => {
         if (prev <= 1) {
           fetchData(true);
@@ -271,10 +273,23 @@ function DashboardContent() {
         }
         return prev - 1;
       });
+
+      // Athena Cache Countdown (15m server-side)
+      if (summary?.meta?.athena_cache_expires_at) {
+        const expiresAt = new Date(summary.meta.athena_cache_expires_at).getTime();
+        const diff = expiresAt - Date.now();
+        if (diff > 0) {
+          const m = Math.floor(diff / 1000 / 60);
+          const s = Math.floor((diff / 1000) % 60);
+          setAthenaCountdown(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+        } else {
+          setAthenaCountdown('EXPIRADO');
+        }
+      }
     }, 1000);
     
     return () => clearInterval(timer);
-  }, [autoRefresh, fetchData]);
+  }, [autoRefresh, fetchData, summary]);
 
   if (error === 'AWS_SSO_EXPIRED') {
     return (
@@ -435,14 +450,23 @@ function DashboardContent() {
           </div>
 
           {/* DISCRETE META DATA */}
-          <div className="flex justify-between items-center px-1 border-y border-gray-800/50 py-2">
-             <div className="flex flex-col">
-                <span className="text-[8px] uppercase font-bold text-gray-500 tracking-wider">Última Saída (AWS)</span>
-                <span className="text-[10px] text-blue-300 font-mono">{fmtDate(summary?.meta?.aws_last_peso_saida_brt)}</span>
+          <div className="flex justify-between items-center px-1 border-y border-gray-800/50 py-3 bg-gray-900/10">
+             <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-black text-white px-2 py-0.5 bg-gray-800 rounded border border-gray-700">AWS</span>
+                    <span className="text-[10px] text-gray-400 font-bold">Saída <span className="text-blue-400">{fmtDate(summary?.meta?.aws_last_peso_saida_brt)}</span></span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-10" />
+                    <span className="text-[10px] text-gray-400 font-bold">Cheguei <span className="text-blue-400">{fmtDate(summary?.meta?.aws_last_cheguei_brt)}</span></span>
+                </div>
              </div>
-             <div className="flex flex-col items-end">
-                <span className="text-[8px] uppercase font-bold text-gray-500 tracking-wider text-right">Último Cheguei (AWS)</span>
-                <span className="text-[10px] text-blue-300 font-mono text-right">{fmtDate(summary?.meta?.aws_last_cheguei_brt)}</span>
+             <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-full px-3 py-1">
+                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                    <span className="text-[9px] font-black text-blue-400 uppercase tracking-tighter">PRÓXIMO EM {athenaCountdown}</span>
+                </div>
+                <span className="text-[8px] text-gray-500 font-bold">Local: {lastFetch}</span>
              </div>
           </div>
         </header>
@@ -774,53 +798,45 @@ function DashboardContent() {
             </div>
           </div>
 
-          <div className="text-right flex flex-col items-end">
-          <div className="text-xs font-sans text-white/80 mb-px flex items-center gap-3">
-            <div 
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className={clsx(
-                "flex items-center gap-1.5 px-2 py-0.5 rounded-full cursor-pointer transition-all border",
-                autoRefresh ? "bg-blue-500/10 border-blue-500/30 text-blue-400" : "bg-gray-800 border-gray-700 text-gray-500"
-              )}
-              title={autoRefresh ? "Auto-refresh ativado" : "Auto-refresh pausado"}
-            >
-              <div className={clsx("w-1.5 h-1.5 rounded-full", autoRefresh ? "bg-blue-500 animate-pulse" : "bg-gray-600")} />
-              <span className="text-[9px] font-bold uppercase tracking-wider">
-                {autoRefresh ? `Próximo em ${countdown}s` : 'Auto-refresh OFF'}
-              </span>
+          <div className="flex items-center gap-4 py-1.5 px-4 bg-gray-900/20 border border-gray-800 rounded-2xl relative">
+            {/* Athena Cache Status */}
+            <div className="flex items-center gap-2.5 px-4 py-2 bg-blue-500/5 border border-blue-500/20 rounded-full transition-all group hover:bg-blue-500/10 h-11">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.6)]" />
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] font-black text-blue-500/80 uppercase tracking-widest mb-0.5">PRÓXIMO EM</span>
+                <span className="text-sm font-black text-blue-400 font-mono tracking-tighter">{athenaCountdown}</span>
+              </div>
             </div>
-            
-            <button 
-              onClick={() => { fetchData(); setCountdown(60); }}
-              className="p-1 hover:bg-gray-800 rounded transition text-gray-400 hover:text-white"
-              title="Atualizar Agora"
-            >
-              <Activity className={clsx("w-3 h-3", loading && "animate-spin text-blue-500")} />
-            </button>
 
-            <div className="h-4 w-px bg-gray-800 mx-1" />
+            <div className="h-8 w-px bg-gray-800" />
 
-            <div className="flex flex-col items-end">
-              <span className="text-[9px] uppercase text-white/90 font-bold tracking-wider">Última Saída</span>
-              <span className="text-blue-400 font-bold tracking-wide font-sans leading-none mt-0.5">
-                {summary?.meta?.panel_updated_at_brt ? summary.meta.panel_updated_at_brt.split(' ')[1] : lastFetch}
-              </span>
+            {/* AWS Timestamps & Local Info */}
+            <div className="flex flex-col items-end gap-1.5">
+              <div className="flex items-center gap-3">
+                 <div className="flex items-center gap-1.5">
+                   <span className="text-[9px] font-black text-white px-1.5 py-0.5 bg-gray-800 rounded border border-gray-700">AWS</span>
+                   <span className="text-[10px] font-bold text-white/90">Saída <span className="text-gray-400">{fmtDate(summary?.meta?.aws_last_peso_saida_brt)}</span></span>
+                 </div>
+                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500/20" />
+                 <span className="text-[10px] font-bold text-white/90">Cheguei <span className="text-gray-400">{fmtDate(summary?.meta?.aws_last_cheguei_brt)}</span></span>
+              </div>
+
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-1.5 opacity-60">
+                  <Activity className={clsx("w-3 h-3 transition-all", loading ? "animate-spin text-blue-500" : "text-gray-400")} />
+                  <span className="text-[9px] font-bold text-gray-400">{autoRefresh ? `Polling local em ${countdown}s` : 'Polling OFF'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-black text-white uppercase tracking-wider mb-0.5">Última Saída</span>
+                  <span className="text-blue-400 font-black tracking-tighter text-sm leading-none">
+                    {summary?.meta?.panel_updated_at_brt ? summary.meta.panel_updated_at_brt.split(' ')[1] : lastFetch}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="text-[10px] font-sans text-white/90 flex items-center gap-1.5 opacity-90">
-            <span className="uppercase text-[9px] text-white/90 font-bold tracking-wider">AWS</span>
-            <span className="text-white/95">
-              Saída <span className="text-gray-200 font-sans">{fmtDate(summary?.meta?.aws_last_peso_saida_brt)}</span>
-            </span>
-            <span className="text-gray-700 mx-0.5">•</span>
-            <span className="text-white/95">
-              Cheguei <span className="text-gray-200 font-sans">{fmtDate(summary?.meta?.aws_last_cheguei_brt)}</span>
-            </span>
-          </div>
-
         </div>
-      </div>
-    </header>
+      </header>
 
       {/* CONTENT GRID */}
       <div className="flex-1 grid gap-4 min-h-0 xl:grid-cols-12 relative">

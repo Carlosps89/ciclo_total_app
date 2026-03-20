@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -12,6 +13,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (!hourTimestamp) {
       return NextResponse.json({ error: 'Missing hourTimestamp parameter' }, { status: 400 });
     }
+
+    const cacheKey = `pac_diag_aging_drilldown_v2_${terminal}_${hourTimestamp}_${produto || 'all'}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
 
     const TARGET_VIEW = 'VW_Ciclo';
     const map = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
@@ -83,7 +88,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       };
     });
 
-    return NextResponse.json({ vehicles });
+    const response = { vehicles };
+    setCached(cacheKey, response);
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error('[Aging Drilldown API]', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

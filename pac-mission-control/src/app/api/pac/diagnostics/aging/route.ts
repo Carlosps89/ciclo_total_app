@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap, COMMON_CTES } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -15,6 +16,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (!startDate || !endDate) {
       return NextResponse.json({ error: 'Missing date parameters' }, { status: 400 });
     }
+
+    const cacheKey = `pac_diag_aging_v2_${terminal}_${produto || 'all'}_${startDate}_${endDate}_${slaDays}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
 
     const TARGET_VIEW = 'VW_Ciclo';
 
@@ -102,7 +107,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       };
     });
 
-    return NextResponse.json({ buckets: chartData });
+    const response = { buckets: chartData };
+    setCached(cacheKey, response);
+    return NextResponse.json(response);
   } catch (error: any) {
     console.error('[Aging API]', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

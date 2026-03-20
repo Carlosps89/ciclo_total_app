@@ -1,20 +1,11 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_VIEW, ATHENA_DATABASE } from '@/lib/athena';
-import { COMMON_CTES, getCleanMap } from '@/lib/athena-sql';
+import { runQuery, ATHENA_VIEW, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
+import { COMMON_CTES } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 
-async function getSchemaMap(): Promise<Record<string, string>> {
-    const cacheKey: string = 'schema_map_v2';
-    const cached: Record<string, string> | null = getCached<Record<string, string>>(cacheKey);
-    if (cached) return cached;
-    const result: ResultSet | undefined = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns: string[] = result?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [];
-    const map: Record<string, string> = getCleanMap(columns);
-    setCached(cacheKey, map, 6 * 60 * 60 * 1000);
-    return map;
-}
+// Usando getSchemaMap global de @/lib/athena
 
 // Helper to get BRT components
 function getBRTComponents(date: Date): { full: string; ymd: string; h: string; m: string; s: string; year: string; month: string; day: string } {
@@ -42,12 +33,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         const praca: string | null = searchParams.get('praca');
         const debug: string | null = searchParams.get('debug');
 
-        // CACHE LAYER (30s)
         const CACHE_KEY: string = `pac_ciclo_total_v2_${terminal}_${produto || 'all'}_${praca || 'all'}`;
-        const cached: unknown = getCached<unknown>(CACHE_KEY);
-        if (cached) {
-            // Add header to indicate cache hit if desired, but here just return
-            return NextResponse.json(cached);
+        const cachedData = getCached<any>(CACHE_KEY);
+        if (cachedData) {
+            return NextResponse.json(cachedData);
         }
 
         const map: Record<string, string> = await getSchemaMap();
@@ -227,8 +216,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         // DEBUG / SANITY CHECK
         console.log(`[CICLO-TOTAL-HOUR] terminal=${terminal} now_brt=${brt.full} max_peso_saida=${last_ts} window=${chosenH.label} volume=${chosenH.vol}`);
 
-        // Set Cache (30s)
-        setCached(CACHE_KEY, response, 30 * 1000);
+        // Set Cache (15 min)
+        setCached(CACHE_KEY, response, 15 * 60 * 1000);
 
         return NextResponse.json(response);
     } catch (error) {

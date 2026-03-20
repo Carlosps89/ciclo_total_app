@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
-import { getCleanMap } from '@/lib/athena-sql';
+import { runQuery, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
+import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { AnticipationResponse } from '@/lib/types';
 import { ResultSet } from '@aws-sdk/client-athena';
@@ -24,15 +24,21 @@ export async function GET(request: Request): Promise<NextResponse> {
     const praca: string | null = searchParams.get('praca');
     const debug: string | null = searchParams.get('debug');
 
+    // Build schema map for VW_Ciclo (Cached separately for 6h in lib/athena)
     const TARGET_VIEW: string = 'VW_Ciclo';
-
-    // Cast to any to avoid strict type checks on dynamic map properties
-    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-      .then((cols: string[]) => getCleanMap(cols));
 
     const now: Date = new Date();
     const brt = getBRTComponents(now); // D0
+
+    // CACHE LAYER (15 min)
+    const CACHE_TTL: number = 15 * 60 * 1000;
+    const CACHE_KEY: string = `pac_antecipacoes_v2_${terminal}_${produto || 'all'}_${praca || 'all'}`;
+    const cachedData = getCached<any>(CACHE_KEY);
+    if (cachedData) {
+        return NextResponse.json(cachedData);
+    }
+
+    const map = await getSchemaMap(TARGET_VIEW);
 
     // Time Boundaries
     const startDay: string = `${brt.ymd} 00:00:00`;
@@ -287,7 +293,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       }
     };
 
-    // No caching during debug phase to ensure freshness
+    // Set Cache (15 min)
+    setCached(CACHE_KEY, response, 15 * 60 * 1000);
+
     return NextResponse.json(response);
 
   } catch (error) {

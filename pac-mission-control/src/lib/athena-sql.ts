@@ -1,4 +1,4 @@
-import { mapColumns } from './athena';
+import { mapColumns, ATHENA_DATABASE, ATHENA_VIEW } from './athena';
 
 
 export const COMMON_CTES = (map: Record<string, string>, terminal: string, extraFilters: string = ''): string => `
@@ -30,7 +30,7 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
         coalesce(try_cast(${map.dt_agendamento} as timestamp), timestamp '1900-01-01 00:00:00'),
         coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
       ) as ts_ult
-    FROM "db_gmo_trusted"."vw_ciclo_v2"
+    FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}"
     WHERE ${map.terminal} = '${terminal}'
     ${extraFilters}
   ),

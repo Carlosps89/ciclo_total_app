@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 
@@ -17,6 +18,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const now = new Date();
     const todayStr: string = now.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-');
     const [y, m, d_part]: string[] = todayStr.split('-');
+
+    const cacheKey = `pac_diag_rca_export_today_v2_${terminal}_${produto || 'all'}_${praca || 'all'}_${todayStr}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
 
     const rawCols: string[] = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`)
       .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
@@ -102,12 +107,15 @@ export async function GET(request: Request): Promise<NextResponse> {
       };
     }) || [];
 
-    return NextResponse.json({
+    const response = {
       terminal,
       date: todayStr,
       count: vehiclesExport.length,
       vehicles: vehiclesExport
-    });
+    };
+
+    setCached(cacheKey, response);
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error("Export Today API Error:", error);

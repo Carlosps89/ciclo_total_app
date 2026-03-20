@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 
-const CACHE_TTL: number = 60 * 1000;
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -23,10 +23,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Switch to VW_Ciclo for data consistency
     const TARGET_VIEW: string = 'VW_Ciclo';
 
-    // Build schema map for VW_Ciclo
-    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-      .then((cols: string[]) => getCleanMap(cols));
+    // Build schema map for VW_Ciclo (Cached separately for 6h in lib/athena)
+    const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
 
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
     

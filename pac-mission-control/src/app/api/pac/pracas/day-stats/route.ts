@@ -1,23 +1,14 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_VIEW, ATHENA_DATABASE } from '@/lib/athena';
-import { COMMON_CTES, getCleanMap } from '@/lib/athena-sql';
+import { runQuery, ATHENA_VIEW, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
+import { COMMON_CTES } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { getPracaSqlMapper } from '@/lib/pracas';
 import { ResultSet, ColumnInfo, Row } from '@aws-sdk/client-athena';
 
-const CACHE_TTL = 60 * 1000; // 1 minute
+const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 const META_H = 46.5333; // 46h32m
 
-async function getSchemaMap(): Promise<Record<string, string>> {
-    const cacheKey = 'schema_map_v2';
-    const cached = getCached<Record<string, string>>(cacheKey);
-    if (cached) return cached;
-    const result = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns = (result?.ResultSetMetadata?.ColumnInfo?.map((c: ColumnInfo) => c.Name) || []).filter((n: string | undefined | null): n is string => !!n);
-    const map = getCleanMap(columns);
-    setCached(cacheKey, map, 6 * 60 * 60 * 1000); // 6h
-    return map;
-}
+// Usando getSchemaMap global de @/lib/athena
 
 export async function GET(request: Request): Promise<NextResponse> {
     try {
@@ -26,7 +17,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const produto = searchParams.get('produto');
 
         const cacheKey = `pac_pracas_day_stats_${terminal}_${produto || 'all'}`;
-        const cachedData = getCached(cacheKey);
+        const cachedData = getCached<any>(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
         const map = await getSchemaMap();

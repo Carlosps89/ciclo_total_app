@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery } from '@/lib/athena';
 import { getMunicipiosByPraca, sqlNormalizeExpr, normalizeCity } from '@/lib/pracas';
+import { getCached, setCached } from '@/lib/cache';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
@@ -10,6 +11,10 @@ export async function GET(request: Request) {
     if (!terminal || !praca) {
         return NextResponse.json({ error: 'Terminal and praca are required' }, { status: 400 });
     }
+
+    const cacheKey = `pac_pracas_debug_v2_${terminal}_${praca}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
 
     try {
         const municipiosRaw = getMunicipiosByPraca(terminal, praca);
@@ -63,7 +68,7 @@ export async function GET(request: Request) {
             countTodayFiltered = filteredResult?.Rows?.[1]?.Data?.[0]?.VarCharValue || 0;
         }
 
-        return NextResponse.json({
+        const response = {
             terminal,
             praca,
             municipios_raw_count: municipiosRaw.length,
@@ -76,7 +81,10 @@ export async function GET(request: Request) {
                 count_today_total: Number(countTodayTotal),
                 count_today_filtered: Number(countTodayFiltered)
             }
-        });
+        };
+
+        setCached(cacheKey, response);
+        return NextResponse.json(response);
     } catch (e: any) {
         console.error("[API Pracas Debug] Error", e);
         return NextResponse.json({ error: e.message }, { status: 500 });

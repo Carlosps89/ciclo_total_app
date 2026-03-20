@@ -31,6 +31,10 @@ export async function GET(req: NextRequest) {
         return Response.json({ error: "Missing startDate or endDate" }, { status: 400 });
     }
 
+    const cacheKey = `pac_hist_summary_v2_${terminal}_${startDate}_${endDate}_${praca}_${produto || 'all'}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return Response.json(cachedData);
+
     try {
         const map = await getSchemaMap();
         const pracaFilterEarly = applyPracaFilter(terminal, praca, 'calc.origem');
@@ -74,6 +78,7 @@ export async function GET(req: NextRequest) {
             };
         }
 
+        setCached(cacheKey, summary);
         return Response.json(summary);
 
     } catch (e: any) {

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { runQuery } from "@/lib/athena"; 
+import { getCached, setCached } from "@/lib/cache";
 
 type DrillItem = {
   gmo_id: string;
@@ -48,8 +49,6 @@ export async function GET(req: NextRequest) {
 
   const hourNorm = normalizeHourInput(hourRaw);
   if (!hourNorm) {
-    // ✅ aqui está o bug mais provável: o backend não aceita "YYYY-MM-DD HH:00:00"
-    // agora aceitamos. Se não bater, retornamos 400 com mensagem clara.
     return Response.json(
       {
         error: "invalid_hour",
@@ -60,6 +59,10 @@ export async function GET(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  const cacheKey = `pac_forecast_drilldown_v2_${terminal}_${hourNorm}`;
+  const cachedData = getCached(cacheKey);
+  if (cachedData) return Response.json(cachedData);
 
   // Construção segura (sem undefined)
   const startIso = hourNorm.replace(" ", "T"); // from_iso8601_timestamp
@@ -116,15 +119,15 @@ export async function GET(req: NextRequest) {
     }));
 
     // ✅ Importante: mesmo vazio, retorna 200
-    return Response.json(
-      {
-        terminal,
-        hour: hourNorm,
-        count: items.length,
-        rows: items, // Frontend expects 'rows' from previous implementation
-      },
-      { status: 200 }
-    );
+    const response = {
+      terminal,
+      hour: hourNorm,
+      count: items.length,
+      rows: items,
+    };
+    
+    setCached(cacheKey, response);
+    return Response.json(response, { status: 200 });
   } catch (err: any) {
     console.error("[forecast.drilldown] Error", {
       terminal,

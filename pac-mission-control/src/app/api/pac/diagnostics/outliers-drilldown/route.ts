@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
+import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 
 export async function GET(request: Request) {
@@ -21,6 +22,10 @@ export async function GET(request: Request) {
     if (!terminal || !startDate || !endDate || !stage) {
       return NextResponse.json({ error: 'Faltam parâmetros obrigatórios (terminal, startDate, endDate, stage)' }, { status: 400 });
     }
+
+    const cacheKey = `pac_diag_outliers_drilldown_v2_${terminal}_${startDate}_${endDate}_${stage}_${minHours}_${maxHours || 'inf'}_${praca}_${produto || 'all'}`;
+    const cachedData = getCached(cacheKey);
+    if (cachedData) return NextResponse.json(cachedData);
 
     const TARGET_VIEW: string = 'VW_Ciclo';
 
@@ -209,7 +214,7 @@ export async function GET(request: Request) {
       };
     }).filter((h: any) => h.day !== 'N/A');
 
-    return NextResponse.json({
+    const response = {
       meta: {
         stage,
         minHours,
@@ -220,7 +225,10 @@ export async function GET(request: Request) {
       vehicles,
       histogram: histData,
       heatmap
-    });
+    };
+
+    setCached(cacheKey, response);
+    return NextResponse.json(response);
 
   } catch (e: any) {
     console.error("Outliers Drilldown API Error:", e);

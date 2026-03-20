@@ -1,22 +1,13 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_VIEW, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_VIEW, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
 import { COMMON_CTES, getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 
-const CACHE_TTL: number = 60 * 1000;
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
-async function getSchemaMap(): Promise<Record<string, string>> {
-    const cacheKey: string = 'schema_map_v2';
-    const cached: Record<string, string> | null = getCached<Record<string, string>>(cacheKey);
-    if (cached) return cached;
-    const result: ResultSet | undefined = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns: string[] = result?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [];
-    const map: Record<string, string> = getCleanMap(columns);
-    setCached(cacheKey, map, 6 * 60 * 60 * 1000); // 6h
-    return map;
-}
+// Remoção da função local getSchemaMap pois agora usamos a global de @/lib/athena
 
 export async function GET(request: Request): Promise<NextResponse> {
     try {
@@ -27,7 +18,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const debug: string | null = searchParams.get('debug');
 
         const cacheKey: string = `pac_summary_${terminal}_${produto || 'all'}_${praca || 'all'}`;
-        const cachedData: unknown = getCached(cacheKey);
+        const cachedData = getCached<any>(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
         const map: Record<string, string> = await getSchemaMap();
@@ -75,9 +66,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
         // Parallel: Meta Query (Max Timestamps) using VW_Ciclo for Global Freshness
         const TARGET_VIEW_META: string = 'VW_Ciclo';
-        const mapMeta: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW_META}" LIMIT 0`)
-            .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-            .then((cols: string[]) => getCleanMap(cols));
+        const mapMeta: Record<string, string> = await getSchemaMap(TARGET_VIEW_META);
 
         const pracaFilterMeta = applyPracaFilter(terminal, praca, `base.${mapMeta.origem}`, true);
 
@@ -100,7 +89,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const [results, metaResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
             runQuery(query),
             runQuery(metaQuery).catch(err => {
-                console.warn("Meta Query Failed:", err);
+                console.warn("[Summary] Meta Query (Timestamps) Failed:", err.message);
                 return undefined;
             })
         ]);
@@ -148,7 +137,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             meta: {
                 panel_updated_at_brt: panelTimeISO,
                 aws_last_peso_saida_brt: rawLastPeso ? rawLastPeso.substring(0, 16) : null,
-                aws_last_cheguei_brt: rawLastCheguei ? rawLastCheguei.substring(0, 16) : null
+                aws_last_cheguei_brt: rawLastCheguei ? rawLastCheguei.substring(0, 16) : null,
+                athena_cache_expires_at: new Date(Date.now() + CACHE_TTL).toISOString()
             },
             stages: {
                 aguardando_agendamento: {

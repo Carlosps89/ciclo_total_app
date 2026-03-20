@@ -12,5 +12,12 @@
     "password": "Rumo@2024",
     "role": "OPERACAO",
     "id": "1772216385744"
+  },
+  {
+    "id": "1773669479230",
+    "name": "Maurilio Cunha Costa",
+    "email": "maurilio.costa@rumolog.com",
+    "password": "Rumo@2026",
+    "role": "ANALISTA"
   }
 ]

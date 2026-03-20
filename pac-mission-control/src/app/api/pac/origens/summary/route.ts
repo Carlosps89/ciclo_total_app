@@ -1,22 +1,13 @@
 
 import { NextRequest } from "next/server";
-import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from "@/lib/athena";
-import { COMMON_CTES, getCleanMap } from "@/lib/athena-sql";
+import { runQuery, ATHENA_DATABASE, ATHENA_VIEW, getSchemaMap } from "@/lib/athena";
+import { COMMON_CTES } from "@/lib/athena-sql";
 import { getCached, setCached } from "@/lib/cache";
 import { applyPracaFilter } from "@/lib/pracas";
 
 export const dynamic = 'force-dynamic';
 
-async function getSchemaMap(): Promise<Record<string, string>> {
-    const cacheKey = 'schema_map_v2';
-    const cached = getCached<Record<string, string>>(cacheKey);
-    if (cached) return cached;
-    const result = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns = result?.ResultSetMetadata?.ColumnInfo?.map((c: any) => c.Name).filter((n: any): n is string => !!n) || [];
-    const map = getCleanMap(columns);
-    setCached(cacheKey, map, 6 * 60 * 60 * 1000);
-    return map;
-}
+// Usando getSchemaMap global de @/lib/athena
 
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
@@ -28,6 +19,10 @@ export async function GET(req: NextRequest) {
   // ranges: today, week, month, year
 
   try {
+      const CACHE_KEY = `pac_origens_summary_v1_${terminal}_${range}_${produto || 'all'}_${praca || 'all'}`;
+      const cachedData = getCached<any>(CACHE_KEY);
+      if (cachedData) return Response.json(cachedData);
+
       const map = await getSchemaMap();
       
       // Timezone & Range Logic (Consistent with /details)
@@ -86,7 +81,9 @@ export async function GET(req: NextRequest) {
               });
           }
       }
-      return Response.json({ items });
+      const response = { items };
+      setCached(CACHE_KEY, response, 15 * 60 * 1000); // 15 min cache
+      return Response.json(response);
   } catch(e: any) {
       console.error(e);
       return Response.json({ error: e.message }, { status: 500 });

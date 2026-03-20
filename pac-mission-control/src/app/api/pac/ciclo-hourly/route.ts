@@ -1,22 +1,13 @@
 
 import { NextRequest } from 'next/server';
-import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, ATHENA_VIEW, getSchemaMap } from '@/lib/athena';
 import { COMMON_CTES, getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 
 export const dynamic = 'force-dynamic';
 
-async function getSchemaMap(): Promise<Record<string, string>> {
-    const cacheKey = 'schema_map_v2';
-    const cached = getCached<Record<string, string>>(cacheKey);
-    if (cached) return cached;
-    const result = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" LIMIT 0`);
-    const columns = result?.ResultSetMetadata?.ColumnInfo?.map((c: any) => c.Name).filter((n: any): n is string => !!n) || [];
-    const map = getCleanMap(columns);
-    setCached(cacheKey, map, 6 * 60 * 60 * 1000);
-    return map;
-}
+// Usando getSchemaMap global de @/lib/athena
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -56,6 +47,13 @@ export async function GET(req: NextRequest) {
   }
   
   try {
+     // CACHE LAYER (15 min)
+     const CACHE_KEY = `pac_ciclo_hourly_v2_${terminal}_${produto || 'all'}_${praca || 'all'}_${dateResult || 'today'}`;
+     const cachedData = getCached<any>(CACHE_KEY);
+     if (cachedData) {
+         return Response.json(cachedData);
+     }
+
      const map = await getSchemaMap();
      
      const query = `
@@ -116,9 +114,14 @@ export async function GET(req: NextRequest) {
          }
      }
      
-     return Response.json({
+     const response = {
          data: finalData
-     });
+     };
+
+     // Set Cache (15 min)
+     setCached(CACHE_KEY, response, 15 * 60 * 1000);
+     
+     return Response.json(response);
      
   } catch (err: any) {
       console.error(err);
