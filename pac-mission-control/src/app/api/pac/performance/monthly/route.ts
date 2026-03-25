@@ -5,7 +5,7 @@ import { getCached, setCached } from '@/lib/cache';
 import { getPracaSqlMapper } from '@/lib/pracas';
 import { ResultSet, ColumnInfo, Row } from '@aws-sdk/client-athena';
 
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 const META_H = 40.0; // Meta 40h for Cockpit Premium
 
 // Usando getSchemaMap global de @/lib/athena

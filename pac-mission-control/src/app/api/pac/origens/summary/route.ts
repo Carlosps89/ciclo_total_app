@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
           }
       }
       const response = { items };
-      setCached(CACHE_KEY, response, 15 * 60 * 1000); // 15 min cache
+      setCached(CACHE_KEY, response, 30 * 60 * 1000); // 15 min cache
       return Response.json(response);
   } catch(e: any) {
       console.error(e);

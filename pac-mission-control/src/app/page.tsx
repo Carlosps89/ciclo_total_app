@@ -42,6 +42,8 @@ function DashboardContent() {
   const [availableProdutos, setAvailableProdutos] = useState<string[]>([]);
   const [selectedPraca, setSelectedPraca] = useState<string>('TODAS');
   const [availablePracas, setAvailablePracas] = useState<string[]>(['TODAS']);
+  const [selectedCliente, setSelectedCliente] = useState<string>('');
+  const [availableClientes, setAvailableClientes] = useState<string[]>([]);
 
   // Load Praca from Local Storage
   useEffect(() => {
@@ -135,7 +137,8 @@ function DashboardContent() {
     setAvgCicloH(null);
     try {
         const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
-        const res = await fetch(`/api/pac/antecipacoes/bucket-details?terminal=${terminal}&bucket=${encodeURIComponent(bucket)}${prodParam}`);
+        const clientParam = selectedCliente ? `&cliente=${encodeURIComponent(selectedCliente)}` : '';
+        const res = await fetch(`/api/pac/antecipacoes/bucket-details?terminal=${terminal}&bucket=${encodeURIComponent(bucket)}${prodParam}${clientParam}`);
         if (res.ok) {
             const data = await res.json();
             setActiveBucketDetails(data.items || []);
@@ -163,12 +166,13 @@ function DashboardContent() {
       setError(null);
       const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
       const pracaParam = selectedPraca ? `&praca=${encodeURIComponent(selectedPraca)}` : '';
-      const q: string = `?terminal=${terminal}${prodParam}${pracaParam}`;
+      const clientParam = selectedCliente ? `&cliente=${encodeURIComponent(selectedCliente)}` : '';
+      const q: string = `?terminal=${terminal}${prodParam}${pracaParam}${clientParam}`;
       const responses: Response[] = await Promise.all([
         fetch(`/api/pac/summary${q}`),
         fetch(`/api/pac/ciclo-total${q}`),
         fetch(`/api/pac/antecipacoes${q}`),
-        fetch(`/api/pac/pracas/day-stats?terminal=${terminal}${prodParam}`)
+        fetch(`/api/pac/pracas/day-stats?terminal=${terminal}${prodParam}${clientParam}`)
       ]);
 
       // Check for SSO Auth Error in any response
@@ -203,7 +207,7 @@ function DashboardContent() {
       setLoading(false);
       setIsRefreshing(false);
     }
-  }, [terminal, selectedProduto, selectedPraca]);
+  }, [terminal, selectedProduto, selectedPraca, selectedCliente]);
 
   // Specific Outliers Fetcher for Toggle
   const fetchOnlyOutliers = async () => {
@@ -211,7 +215,8 @@ function DashboardContent() {
     try {
       const prodParam = selectedProduto ? `&produto=${encodeURIComponent(selectedProduto)}` : '';
       const pracaParam = selectedPraca ? `&praca=${encodeURIComponent(selectedPraca)}` : '';
-      const res = await fetch(`/api/pac/outliers?terminal=${terminal}${prodParam}${pracaParam}&type=${outlierType}`);
+      const clientParam = selectedCliente ? `&cliente=${encodeURIComponent(selectedCliente)}` : '';
+      const res = await fetch(`/api/pac/outliers?terminal=${terminal}${prodParam}${pracaParam}${clientParam}&type=${outlierType}`);
       if (res.ok) {
         setOutliers(await res.json());
       }
@@ -251,8 +256,20 @@ function DashboardContent() {
         console.error("Failed to fetch pracas", e);
       }
     };
+    const fetchClientes = async () => {
+      try {
+        const res = await fetch(`/api/pac/clientes?terminal=${terminal}`);
+        if(res.ok) {
+          const data = await res.json();
+          setAvailableClientes(data.items || []);
+        }
+      } catch (e) {
+        console.error("Failed to fetch clients", e);
+      }
+    };
     fetchProds();
     fetchPracas();
+    fetchClientes();
   }, [terminal]);
 
   useEffect(() => {
@@ -560,58 +577,69 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* PLANNING: TODAY VS TOMORROW */}
+        {/* PLANNING: ROLLING 24H */}
         <div className="bg-gray-900/40 border border-gray-800 rounded-2xl p-4 flex flex-col gap-4">
-          <div className="flex justify-between items-center">
-              <span className="text-[10px] uppercase font-bold text-gray-300">Planejamento Antecipação (D vs D+1)</span>
+          <div className="flex justify-between items-start">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase font-bold text-gray-300">Distribuição de Chegadas (24h)</span>
+                <div className="flex gap-3 text-[8px] font-black uppercase">
+                  {(() => {
+                    const tHoje = anticipation?.rolling_windows?.filter((x: any) => x.day_offset === 0).reduce((acc: number, x: any) => acc + x.count, 0) || 0;
+                    const tD1 = anticipation?.rolling_windows?.filter((x: any) => x.day_offset === 1).reduce((acc: number, x: any) => acc + x.count, 0) || 0;
+                    return (
+                      <>
+                        <span className="text-blue-400">HOJE: {tHoje}</span>
+                        <span className="text-purple-400">D+1: {tD1}</span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
               <CalendarClock className="w-4 h-4 text-gray-500" />
           </div>
           
-          <div className="flex h-32 items-end gap-12 px-8 justify-center">
-             {/* Hoje */}
-             <div className="flex-1 flex flex-col items-center gap-2 max-w-[80px]">
-                <div className="w-full flex items-end gap-1 h-24 relative group">
-                  <div 
-                    className="absolute -top-5 w-full text-center text-[10px] font-black text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    {anticipation?.window_bars?.d0_total || 0}
-                  </div>
-                  <div 
-                    className="w-full bg-blue-500 rounded-t-lg transition-all duration-500 shadow-[0_0_15px_rgba(59,130,246,0.2)]" 
-                    style={{ 
-                      height: anticipation?.window_bars?.d0_total 
-                        ? `${Math.max((anticipation.window_bars.d0_total / Math.max(anticipation.window_bars.d0_total + anticipation.window_bars.d1_total, 1)) * 100, 10)}%`
-                        : '4px'
-                    }}
-                  ></div>
-                </div>
-                <div className="text-[10px] font-black text-blue-400">{(anticipation?.window_bars?.d0_total || 0)}</div>
-                <span className="text-[8px] font-bold text-gray-500 uppercase tracking-tighter">Hoje (D)</span>
-             </div>
+          <div className="flex h-32 items-end gap-1 overflow-x-auto custom-scrollbar pb-6 mt-4 relative">
+             {anticipation?.rolling_windows?.slice(0, 24).map((rec: any, i: number) => {
+                const count: number = rec.count || 0;
+                const maxVal: number = Math.max(...(anticipation?.rolling_windows?.slice(0, 24).map((x: any) => x.count) || [1]), 5);
+                const pct: number = (count / maxVal) * 100;
+                
+                let barColor = "bg-blue-500";
+                if (rec.day_offset === 1) barColor = "bg-purple-500";
+                else if (rec.day_offset >= 2) barColor = "bg-rose-500";
 
-             {/* Amanhã */}
-             <div className="flex-1 flex flex-col items-center gap-2 max-w-[80px]">
-                <div className="w-full flex items-end gap-1 h-24 relative group">
-                  <div 
-                    className="absolute -top-5 w-full text-center text-[10px] font-black text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    {anticipation?.window_bars?.d1_total || 0}
+                const isFirstOfDay = i === 0 || anticipation?.rolling_windows?.[i-1]?.day_offset !== rec.day_offset;
+
+                return (
+                  <div key={`mob-roll-refine-${i}`} className="flex-none w-6 flex flex-col justify-end h-full relative group">
+                    {count > 0 && (
+                      <span className="absolute -top-4 w-full text-center text-[8px] font-black text-white/50">{count}</span>
+                    )}
+                    <div 
+                      className={clsx(
+                        "w-full rounded-t-[1px] transition-all duration-500",
+                        count > 0 ? barColor : "bg-gray-800/20"
+                      )} 
+                      style={{ height: count > 0 ? `${Math.max(pct, 5)}%` : '4px' }}
+                    ></div>
+                    {/* Hour Label */}
+                    <span className="text-[6px] text-gray-500 font-bold mt-1 text-center truncate">{rec.label.replace('h','')}</span>
+                    
+                    {/* Day Marker */}
+                    {isFirstOfDay && (
+                       <span className={clsx(
+                         "absolute -bottom-5 left-0 text-[7px] font-black leading-none",
+                         rec.day_offset === 0 ? "text-blue-500" : (rec.day_offset === 1 ? "text-purple-500" : "text-rose-500")
+                       )}>
+                         {rec.day_offset === 0 ? "HOJE" : `D+${rec.day_offset}`}
+                       </span>
+                    )}
                   </div>
-                  <div 
-                    className="w-full bg-purple-500 rounded-t-lg transition-all duration-500 shadow-[0_0_15px_rgba(168,85,247,0.2)]" 
-                    style={{ 
-                      height: anticipation?.window_bars?.d1_total 
-                        ? `${Math.max((anticipation.window_bars.d1_total / Math.max(anticipation.window_bars.d0_total + anticipation.window_bars.d1_total, 1)) * 100, 10)}%`
-                        : '4px'
-                    }}
-                  ></div>
-                </div>
-                <div className="text-[10px] font-black text-purple-400">{(anticipation?.window_bars?.d1_total || 0)}</div>
-                <span className="text-[8px] font-bold text-gray-500 uppercase tracking-tighter">Amanhã (D+1)</span>
-             </div>
+                );
+             })}
           </div>
           <p className="text-[9px] text-gray-500 text-center uppercase tracking-tight italic opacity-60">
-              Volume total de veículos antecipados agendados
+              Arrive-to-Window Distribution (Rolling 24h)
           </p>
         </div>
 
@@ -780,6 +808,15 @@ function DashboardContent() {
                 title="Filtrar por Praça"
              >
                 {availablePracas.map(p => <option key={p} value={p}>{p}</option>)}
+             </select>
+             <select 
+                value={selectedCliente} 
+                onChange={e => setSelectedCliente(e.target.value)}
+                className="bg-gray-900 border border-gray-800 text-white rounded-lg text-[11px] uppercase font-black px-3 py-1.5 cursor-pointer outline-none hover:bg-gray-800 transition shadow-inner"
+                title="Filtrar por Cliente"
+             >
+                <option value="">TODOS OS CLIENTES</option>
+                {availableClientes.map(c => <option key={c} value={c}>{c}</option>)}
              </select>
           </div>
         </div>
@@ -958,114 +995,116 @@ function DashboardContent() {
           />
 
           {/* 3. JANELAS CHART (Cheguei por Horário de Janela) - REPLACES 3 STAGE CARDS */}
-          {anticipation?.window_bars && (
+          {anticipation?.rolling_windows && (
             <div className="min-h-[220px] bg-gray-900/30 border border-gray-800 rounded-xl p-4 flex flex-col relative overflow-hidden w-full shrink-0">
               <div className="flex justify-between items-start mb-2 z-10 w-full">
                 <div className="flex items-center gap-2">
                   <Clock className="w-5 h-5 text-blue-500" />
                   <span className="text-[10px] uppercase text-white/95 font-bold tracking-widest">
-                    Distribuição de Chegadas por Janela (D vs D+1)
+                    Distribuição de Chegadas (Próximas 48h - Dinâmico)
                   </span>
                 </div>
                 <div className="flex gap-4 text-[9px] font-sans uppercase text-white/90">
-                  <div className="flex items-center gap-1"><div className="w-2 h-2 bg-blue-500 rounded-sm"></div>Hoje (D)</div>
-                  <div className="flex items-center gap-1"><div className="w-2 h-2 bg-purple-500 rounded-sm"></div>Amanhã (D+1)</div>
+                  {(() => {
+                    const tHoje = anticipation?.rolling_windows?.filter((x: any) => x.day_offset === 0).reduce((acc: number, x: any) => acc + x.count, 0) || 0;
+                    const tD1 = anticipation?.rolling_windows?.filter((x: any) => x.day_offset === 1).reduce((acc: number, x: any) => acc + x.count, 0) || 0;
+                    const tD2 = anticipation?.rolling_windows?.filter((x: any) => x.day_offset >= 2).reduce((acc: number, x: any) => acc + x.count, 0) || 0;
+                    
+                    return (
+                      <>
+                        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-blue-500 rounded-[2px]"></div>HOJE: <span className="text-blue-400 font-black">{tHoje}</span></div>
+                        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-purple-500 rounded-[2px]"></div>D+1: <span className="text-purple-400 font-black">{tD1}</span></div>
+                        <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-rose-500 rounded-[2px]"></div>D+2+: <span className="text-rose-400 font-black">{tD2}</span></div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
               {/* BARS CONTAINER */}
-              <div className="flex-1 flex items-end justify-between gap-1 w-full pb-5">
-                {/* HOJE (D) - 0 to 23 */}
-                <div className="flex-1 flex items-end justify-between gap-px h-full border-r border-gray-800 pr-1">
-                  {Array.from({ length: 24 }).map((_, h: number) => {
-                    const rec = anticipation?.window_bars?.d0?.find((x) => x.hour === h);
-                    const count: number = rec ? rec.count : 0;
-                    const maxVal: number = Math.max(...(anticipation?.window_bars?.d0.map((x) => x.count) || [1]), 5);
-                    const pct: number = (count / maxVal) * 100;
+              <div className="flex-1 flex items-end justify-between gap-px w-full pb-8 mt-4">
+                {anticipation?.rolling_windows?.map((rec: any, i: number) => {
+                  const count: number = rec.count || 0;
+                  const maxVal: number = Math.max(...(anticipation?.rolling_windows?.map((x: any) => x.count) || [1]), 5);
+                  const pct: number = (count / maxVal) * 100;
+                  
+                  // Color selection based on day_offset
+                  let barColor = "bg-blue-500 hover:bg-blue-400";
+                  let textColor = "text-blue-400";
+                  if (rec.day_offset === 1) {
+                    barColor = "bg-purple-500 hover:bg-purple-400";
+                    textColor = "text-purple-400";
+                  } else if (rec.day_offset >= 2) {
+                    barColor = "bg-rose-500 hover:bg-rose-400";
+                    textColor = "text-rose-400";
+                  }
 
-                    return (
-                      <div key={`d0-${h}`} className="flex-1 flex flex-col justify-end h-full group relative">
-                        {/* Data Label */}
-                        {count > 0 && (
-                          <div 
-                            className="absolute w-full text-center z-20 pointer-events-none transition-all duration-300 flex items-center justify-center font-sans font-bold"
-                            style={{ 
-                              height: pct > 30 ? `${pct}%` : 'auto',
-                              bottom: pct > 30 ? '0' : `${pct}%`,
-                              marginBottom: pct > 30 ? '0px' : '4px'
-                            }}
-                          >
-                            <span className="text-[10px] text-white drop-shadow-md">
-                              {count}
-                            </span>
-                          </div>
-                        )}
-                        {/* Tooltip */}
-                        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-gray-950 border border-gray-700 text-[9px] p-1.5 rounded z-50 whitespace-nowrap shadow-xl">
-                          <span className="font-bold text-white font-sans">{count} Veículos</span>
-                          <span className="text-white/80">Janela {h}h (Hoje)</span>
-                        </div>
+                  // Day Label transitions
+                  const isFirstOfDay = i === 0 || anticipation.rolling_windows[i-1].day_offset !== rec.day_offset;
+                  const dayLabel = rec.day_offset === 0 ? "HOJE" : (rec.day_offset === 1 ? "D+1" : `D+${rec.day_offset}`);
 
-                        <div className={`w-full rounded-t-sm transition-all duration-300 ${count > 0 ? 'bg-blue-500 hover:bg-blue-400' : 'bg-gray-800/10'}`}
-                          style={{ height: count > 0 ? `${Math.max(pct, 5)}%` : '4px' }}>
+                  return (
+                    <div key={`roll-refine-${i}`} className="flex-1 flex flex-col justify-end h-full group relative">
+                      {/* Data Label */}
+                      {count > 0 && (
+                        <div 
+                          className="absolute w-full text-center z-20 pointer-events-none transition-all duration-300 flex items-center justify-center font-sans font-bold shadow-black/20"
+                          style={{ 
+                            height: pct > 35 ? `${pct}%` : 'auto',
+                            bottom: pct > 35 ? '0' : `${pct}%`,
+                            marginBottom: pct > 35 ? '0px' : '4px'
+                          }}
+                        >
+                          <span className={clsx("text-[9px] drop-shadow-md", pct > 35 ? "text-white" : textColor)}>
+                            {count}
+                          </span>
                         </div>
-                        {h % 3 === 0 && (
-                          <span className="text-[8px] text-white/50 font-sans text-center mt-1 absolute -bottom-5 w-full">{h}h</span>
-                        )}
+                      )}
+                      
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-gray-950 border border-gray-700 text-[9px] p-1.5 rounded z-50 whitespace-nowrap shadow-xl">
+                        <span className="font-bold text-white font-sans">{count} Veículos</span>
+                        <span className="text-white/80">Janela {rec.label} ({dayLabel})</span>
+                        <span className="text-[8px] text-gray-500">{i === 0 ? 'AGORA' : `Em ${i}h`}</span>
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* AMANHÃ (D+1) - 0 to 23 */}
-                <div className="flex-1 flex items-end justify-between gap-px h-full pl-1">
-                  {Array.from({ length: 24 }).map((_, h: number) => {
-                    const rec = anticipation?.window_bars?.d1?.find((x) => x.hour === h);
-                    const count: number = rec ? rec.count : 0;
-                    const maxVal: number = Math.max(...(anticipation?.window_bars?.d1.map((x) => x.count) || [1]), 5);
-                    const pct: number = (count / maxVal) * 100;
-
-                    return (
-                      <div key={`d1-${h}`} className="flex-1 flex flex-col justify-end h-full group relative">
-                        {/* Data Label */}
-                        {count > 0 && (
-                          <div 
-                            className="absolute w-full text-center z-20 pointer-events-none transition-all duration-300 flex items-center justify-center font-sans font-bold"
-                            style={{ 
-                              height: pct > 30 ? `${pct}%` : 'auto',
-                              bottom: pct > 30 ? '0' : `${pct}%`,
-                              marginBottom: pct > 30 ? '0px' : '4px'
-                            }}
-                          >
-                            <span className="text-[10px] text-white drop-shadow-md">
-                              {count}
-                            </span>
-                          </div>
-                        )}
-                        <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-gray-950 border border-gray-700 text-[9px] p-1.5 rounded z-50 whitespace-nowrap shadow-xl">
-                          <span className="font-bold text-white font-sans">{count} Veículos</span>
-                          <span className="text-white/80">Janela {h}h (Amanhã)</span>
-                        </div>
-
-                        <div className={`w-full rounded-t-sm transition-all duration-300 ${count > 0 ? 'bg-purple-500 hover:bg-purple-400' : 'bg-gray-800/10'}`}
-                          style={{ height: count > 0 ? `${Math.max(pct, 5)}%` : '4px' }}>
-                        </div>
-                        {h % 3 === 0 && (
-                          <span className="text-[8px] text-white/50 font-sans text-center mt-1 absolute -bottom-5 w-full">{h}h</span>
-                        )}
+                      {/* Bar */}
+                      <div className={clsx(
+                        "w-full rounded-t-[2px] transition-all duration-300",
+                        count > 0 ? barColor : "bg-gray-800/20"
+                      )}
+                        style={{ height: count > 0 ? `${Math.max(pct, 5)}%` : '2px' }}>
                       </div>
-                    );
-                  })}
-                </div>
+                      
+                      {/* X-Axis Labels (Row 1: Hours) - Every hour as requested */}
+                      <span className={clsx(
+                        "text-[7px] font-sans text-center mt-1 absolute -bottom-4 w-full rotate-45 sm:rotate-0",
+                        i === 0 ? "text-blue-400 font-black" : "text-white/30"
+                      )}>
+                        {i === 0 ? 'NOW' : rec.label.replace('h', '')}
+                      </span>
+
+                      {/* X-Axis Labels (Row 2: Day markers) */}
+                      {isFirstOfDay && (
+                        <div className="absolute -bottom-8 left-0 flex items-center gap-1 whitespace-nowrap z-10">
+                          <div className={clsx("w-1 h-1 rounded-full", rec.day_offset === 0 ? "bg-blue-500" : (rec.day_offset === 1 ? "bg-purple-500" : "bg-rose-500"))}></div>
+                          <span className={clsx(
+                            "text-[8px] font-black tracking-tighter",
+                            rec.day_offset === 0 ? "text-blue-500" : (rec.day_offset === 1 ? "text-purple-500" : "text-rose-500")
+                          )}>
+                            {dayLabel}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* TOTAL D+1 LABEL */}
-              <div className="absolute top-4 right-4 z-20 pointer-events-none flex flex-col items-end gap-0.5 opacity-60">
-                <span className="text-[9px] font-sans font-bold text-blue-400">
-                  TOTAL D: {anticipation?.window_bars?.d0_total || 0}
-                </span>
-                <span className="text-[9px] font-sans font-bold text-purple-400">
-                  TOTAL D+1: {anticipation?.window_bars?.d1_total || 0}
+              {/* TOTALS OVERLAY */}
+              <div className="absolute top-4 right-4 z-20 pointer-events-none flex flex-col items-end gap-0.5 opacity-40">
+                <span className="text-[8px] font-sans text-gray-400 uppercase tracking-widest">
+                  {terminal} Dashboard
                 </span>
               </div>
             </div>

@@ -4,6 +4,7 @@ import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { AnticipationResponse } from '@/lib/types';
 import { ResultSet } from '@aws-sdk/client-athena';
+import { getClientAthenaFilter } from '@/lib/client-filter';
 
 
 // Helper to get BRT components (Same as in ciclo-total)
@@ -22,6 +23,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const terminal: string = searchParams.get('terminal') || 'TRO';
     const produto: string | null = searchParams.get('produto');
     const praca: string | null = searchParams.get('praca');
+    const cliente: string | null = searchParams.get('cliente');
     const debug: string | null = searchParams.get('debug');
 
     // Build schema map for VW_Ciclo (Cached separately for 6h in lib/athena)
@@ -31,8 +33,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const brt = getBRTComponents(now); // D0
 
     // CACHE LAYER (15 min)
-    const CACHE_TTL: number = 15 * 60 * 1000;
-    const CACHE_KEY: string = `pac_antecipacoes_v2_${terminal}_${produto || 'all'}_${praca || 'all'}`;
+    const CACHE_TTL: number = 30 * 60 * 1000;
+    const CACHE_KEY: string = `pac_antecipacoes_v3_${terminal}_${produto || 'all'}_${praca || 'all'}_${cliente || 'all'}`;
     const cachedData = getCached<any>(CACHE_KEY);
     if (cachedData) {
         return NextResponse.json(cachedData);
@@ -54,6 +56,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const endNextDay: string = `${brtTmr.ymd} 23:59:59`;
     
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
+    const clienteFilterRaw = getClientAthenaFilter(terminal, cliente, `base.${map.cliente}`);
     
     const pracaFilterRaw = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     if (pracaFilterRaw.isNoMatch) {
@@ -99,6 +102,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           ${pracaFilterRaw.join}
           WHERE base.${map.terminal} = '${terminal}'
             ${produtoFilterRaw.replace(map.produto, `base.${map.produto}`)}
+            ${clienteFilterRaw}
       ),
       dedupped AS (
           SELECT * FROM (
@@ -123,7 +127,9 @@ export async function GET(request: Request): Promise<NextResponse> {
             *,
             CASE WHEN cheguei < janela_agendamento THEN 1 ELSE 0 END as is_early,
             date_diff('second', cheguei, janela_agendamento) / 3600.0 as hours_early,
-            -- D vs D+1 Flag
+            -- Rolling Hour Offset from "Current Hour Start"
+            date_diff('hour', timestamp '${brt.ymd} ${brt.h}:00:00', janela_agendamento) as h_rel,
+            -- D vs D+1 Flag (Legacy support)
             CASE 
                 WHEN date(janela_agendamento) = date(timestamp '${startDay}') THEN 'D0'
                 WHEN date(janela_agendamento) = date(timestamp '${startDay}') + interval '1' day THEN 'D1'
@@ -162,7 +168,16 @@ export async function GET(request: Request): Promise<NextResponse> {
         WHERE is_early = 1
         GROUP BY 1
       )
-      , agg_windows AS (
+      , agg_windows_rolling AS (
+         SELECT 
+            h_rel,
+            count(distinct gmo_id) as cnt_win,
+            min(janela_agendamento) as sample_ts
+         FROM arrivals_today
+         WHERE h_rel >= 0 AND h_rel < 48
+         GROUP BY 1
+      )
+      , agg_windows_legacy AS (
          SELECT 
             window_day,
             hour(janela_agendamento) as h_window,
@@ -186,7 +201,9 @@ export async function GET(request: Request): Promise<NextResponse> {
       UNION ALL
       SELECT 'HIST_RAW' as type, cast(h_bin as varchar) as v1, cast(cnt as varchar) as v2, '' as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_hist_raw
       UNION ALL
-      SELECT 'WINDOW' as type, window_day as v1, cast(h_window as varchar) as v2, cast(cnt_win as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_windows
+      SELECT 'WINDOW_LEGACY' as type, window_day as v1, cast(h_window as varchar) as v2, cast(cnt_win as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_windows_legacy
+      UNION ALL
+      SELECT 'WINDOW_ROLLING' as type, cast(h_rel as varchar) as v1, cast(cnt_win as varchar) as v2, cast(sample_ts as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_windows_rolling
     `;
 
     const results: ResultSet | undefined = await runQuery(query);
@@ -196,12 +213,16 @@ export async function GET(request: Request): Promise<NextResponse> {
     let total_arrivals_unique: number = 0, total_d: number = 0, total_d1: number = 0, total_early: number = 0, total_finished: number = 0, avg_early_h: number = 0;
     const top_origens: { origem: string; count: number }[] = [];
     const hist_raw: Record<number, number> = {};
-    const win_data: Record<string, number> = {}; // "D0-10", "D1-15"
+    const win_legacy: Record<string, number> = {}; 
+    const win_rolling: Record<number, { count: number; ts: string }> = {};
 
 
     interface AthenaRow {
         Data?: { VarCharValue?: string }[];
     }
+
+    // 216: const max_early_h_val = parseFloat(data[6] || '0');
+    let max_early_h_actual = 24;
 
     rows.forEach((r: AthenaRow) => {
       const data: string[] = r.Data?.map((d: { VarCharValue?: string }) => d.VarCharValue || '') || [];
@@ -213,29 +234,34 @@ export async function GET(request: Request): Promise<NextResponse> {
         total_d1 = parseInt(data[3] || '0');
         total_early = parseInt(data[4] || '0');
         avg_early_h = parseFloat(data[5] || '0');
-        // max_early_h = parseFloat(data[6] || '0');
-        total_finished = parseInt(data[7] || '0'); // Subset of filtering
+        max_early_h_actual = Math.max(24, Math.ceil(parseFloat(data[6] || '0')));
+        total_finished = parseInt(data[7] || '0');
       } else if (type === 'ORIGIN') {
-        // ... existing logic ...
         top_origens.push({ origem: data[1], count: parseInt(data[2]) });
       } else if (type === 'HIST_RAW') {
         const bin: number = parseInt(data[1]);
         if (!isNaN(bin)) hist_raw[bin] = parseInt(data[2]);
-      } else if (type === 'WINDOW') {
-        const day: string = data[1]; // D0 or D1
+      } else if (type === 'WINDOW_LEGACY') {
+        const day: string = data[1]; 
         const hour: number = parseInt(data[2]);
-        win_data[`${day}-${hour}`] = parseInt(data[3]);
+        win_legacy[`${day}-${hour}`] = parseInt(data[3]);
+      } else if (type === 'WINDOW_ROLLING') {
+        const h_rel: number = parseInt(data[1]);
+        const count: number = parseInt(data[2]);
+        const ts: string = data[3];
+        win_rolling[h_rel] = { count, ts };
       }
     });
 
-    // Histogram - Fixed Buckets (0-2 ... 22-24, 24+)
-    const step = 2;
-    const effectiveLimit = 24;
+    // Dynamic Histogram - Range based on max_early_h_actual
     const dynamicHistogram: { bucket: string; count: number; pct: number }[] = [];
+    const step = max_early_h_actual > 48 ? 6 : (max_early_h_actual > 24 ? 3 : 2);
     
-    // 1. Buckets 0-24
-    for (let i = 0; i < effectiveLimit; i += step) {
-      const count = (hist_raw[i] || 0) + (hist_raw[i + 1] || 0);
+    for (let i = 0; i < max_early_h_actual; i += step) {
+      let count = 0;
+      for (let j = 0; j < step; j++) {
+        count += (hist_raw[i + j] || 0);
+      }
       dynamicHistogram.push({
         bucket: `${i}-${i + step}`,
         count: count,
@@ -243,36 +269,51 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
 
-    // 2. Overflow Bucket (24+)
+    // Overflow Bucket (Only if there's something beyond max_early_h_actual, which shouldn't happen with our ceil logic)
     let overflowCount = 0;
     Object.keys(hist_raw).forEach(key => {
       const bin = parseInt(key);
-      if (bin >= effectiveLimit) {
+      if (bin >= max_early_h_actual) {
         overflowCount += hist_raw[bin];
       }
     });
 
-    dynamicHistogram.push({
-      bucket: '24h+',
-      count: overflowCount,
-      pct: total_early > 0 ? (overflowCount / total_early * 100) : 0
-    });
+    if (overflowCount > 0) {
+      dynamicHistogram.push({
+        bucket: `${max_early_h_actual}+`,
+        count: overflowCount,
+        pct: total_early > 0 ? (overflowCount / total_early * 100) : 0
+      });
+    }
 
-    // const d0 = [], d1 = [];
+    // 48h Rolling Window
+    const rolling: { hour_rel: number; label: string; count: number; ts: string; day_offset: number }[] = [];
+    const currentHour = parseInt(brt.h);
+    
+    for (let i = 0; i < 48; i++) {
+        const absoluteHour = currentHour + i;
+        const day_offset = Math.floor(absoluteHour / 24);
+        const h_label = absoluteHour % 24;
+        const entry = win_rolling[i] || { count: 0, ts: '' };
+        rolling.push({
+            hour_rel: i,
+            label: `${h_label}h`,
+            count: entry.count,
+            ts: entry.ts,
+            day_offset
+        });
+    }
+
+    // Legacy buckets (still return for backwards compatibility if needed)
     const d0: { hour: number; count: number }[] = [], d1: { hour: number; count: number }[] = [];
-    // let d0_check = 0, d1_check = 0;
     for (let h: number = 0; h < 24; h++) {
-      const c0: number = win_data[`D0-${h}`] || 0;
-      const c1: number = win_data[`D1-${h}`] || 0;
-      d0.push({ hour: h, count: c0 });
-      d1.push({ hour: h, count: c1 });
-      // d0_check += c0;
-      // d1_check += c1;
+      d0.push({ hour: h, count: win_legacy[`D0-${h}`] || 0 });
+      d1.push({ hour: h, count: win_legacy[`D1-${h}`] || 0 });
     }
 
     console.log(`[ANTECIPACOES-UNIVERSE] Total=${total_arrivals_unique} D0=${total_d} D1=${total_d1} Early=${total_early} FinishedSubset=${total_finished}`);
 
-    const response: AnticipationResponse = {
+    const response: AnticipationResponse & { rolling_windows?: any[] } = {
       terminal,
       updated_at: new Date().toISOString(),
       antecipando_agora: {
@@ -281,20 +322,20 @@ export async function GET(request: Request): Promise<NextResponse> {
         avg_h: avg_early_h
       },
       base_agora: { count_total: total_arrivals_unique },
-      //base_finished: { count_total: total_finished }, // Just for reference, although it's a subset
       top_origens,
       histogram: dynamicHistogram,
       window_bars: {
         now_sp_iso: brt.full,
-        d0, // Array of objects
-        d1, // Array of objects 
+        d0,
+        d1,
         d0_total: total_d,
         d1_total: total_d1
-      }
+      },
+      rolling_windows: rolling
     };
 
     // Set Cache (15 min)
-    setCached(CACHE_KEY, response, 15 * 60 * 1000);
+    setCached(CACHE_KEY, response, 30 * 60 * 1000);
 
     return NextResponse.json(response);
 

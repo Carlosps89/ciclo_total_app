@@ -4,10 +4,16 @@ import { COMMON_CTES, getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
+import { getClientAthenaFilter } from '@/lib/client-filter';
 
-const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL: number = 30 * 60 * 1000; // 30 minutes
 
-// Remoção da função local getSchemaMap pois agora usamos a global de @/lib/athena
+// Helper to get BRT components
+function getBRTComponents(date: Date): { year: string } {
+    const fmt = (options: Intl.DateTimeFormatOptions): string => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', ...options }).format(date);
+    const ymd: string = fmt({ year: 'numeric', month: '2-digit', day: '2-digit' });
+    return { year: ymd.substring(0, 4) };
+}
 
 export async function GET(request: Request): Promise<NextResponse> {
     try {
@@ -15,9 +21,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         const terminal: string = searchParams.get('terminal') || 'TRO';
         const produto: string | null = searchParams.get('produto');
         const praca: string | null = searchParams.get('praca');
+        const cliente: string | null = searchParams.get('cliente');
         const debug: string | null = searchParams.get('debug');
 
-        const cacheKey: string = `pac_summary_${terminal}_${produto || 'all'}_${praca || 'all'}`;
+        const cacheKey: string = `pac_summary_v2_${terminal}_${produto || 'all'}_${praca || 'all'}_${cliente || 'all'}`;
         const cachedData = getCached<any>(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
@@ -37,10 +44,14 @@ export async function GET(request: Request): Promise<NextResponse> {
         
         const produtoFilterCalc = produto ? `AND c.produto = '${produto}'` : '';
         const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
+        const clienteFilterCalc = getClientAthenaFilter(terminal, cliente, 'c.cliente');
+        const clienteFilterRaw = getClientAthenaFilter(terminal, cliente, `base.${map.cliente}`);
+
+        const brt = getBRTComponents(new Date());
 
         // Query: Last 24h Summary
         const query: string = `
-      ${COMMON_CTES(map, terminal)}
+      ${COMMON_CTES(map, terminal, '', parseInt(brt.year))}
       ${pracaFilterMain.cte}
       SELECT
         -- Aguardando Agendamento
@@ -62,6 +73,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ${pracaFilterMain.join}
       WHERE c.peso_saida > date_add('day', -1, date_add('hour', -4, now())) 
         ${produtoFilterCalc}
+        ${clienteFilterCalc}
     `;
 
         // Parallel: Meta Query (Max Timestamps) using VW_Ciclo for Global Freshness
@@ -79,6 +91,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${pracaFilterMeta.join}
             WHERE base.${mapMeta.terminal} = '${terminal}'
               ${produtoFilterRaw.replace(map.produto, `base.${mapMeta.produto}`)}
+              ${clienteFilterRaw}
               AND (
                    try_cast(${mapMeta.dt_cheguei} as timestamp) >= date_add('day', -7, date_add('hour', -4, now()))
                   OR                   try_cast(${mapMeta.dt_peso_saida} as timestamp) >= date_add('day', -7, date_add('hour', -4, now()))

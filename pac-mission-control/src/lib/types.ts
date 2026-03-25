@@ -126,6 +126,13 @@ export interface AnticipationResponse {
         d0_total: number;
         d1_total: number;
     };
+    rolling_windows?: {
+        hour_rel: number;
+        label: string;
+        count: number;
+        ts: string;
+        day_offset: number;
+    }[];
 }
 export interface PracaStatsItem {
     praca: string;

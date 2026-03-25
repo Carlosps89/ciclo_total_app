@@ -4,8 +4,9 @@ import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
+import { getClientAthenaFilter } from '@/lib/client-filter';
 
-const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL: number = 30 * 60 * 1000; // 30 minutes
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -13,8 +14,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const terminal: string = searchParams.get('terminal') || 'TRO';
     const produto: string | null = searchParams.get('produto');
     const praca: string | null = searchParams.get('praca');
+    const cliente: string | null = searchParams.get('cliente');
     const type: string = searchParams.get('type') || 'bad'; // 'bad' or 'good'
-    const cacheKey: string = `pac_outliers_${terminal}_${produto || 'all'}_${praca || 'all'}_${type}_v4`;
+    const cacheKey: string = `pac_outliers_v5_${terminal}_${produto || 'all'}_${praca || 'all'}_${cliente || 'all'}_${type}`;
 
     // Check Cache
     const cachedData: unknown = getCached(cacheKey);
@@ -27,6 +29,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
 
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
+    const clienteFilterRaw = getClientAthenaFilter(terminal, cliente, `base.${map.cliente}`);
     
     const pracaFilterRaw = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     if (pracaFilterRaw.isNoMatch) {
@@ -68,6 +71,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           ${pracaFilterRaw.join}
           WHERE base.${map.terminal} = '${terminal}'
             ${produtoFilterRaw.replace(map.produto, `base.${map.produto}`)}
+            ${clienteFilterRaw}
       ),
       dedupped AS (
           SELECT * FROM (

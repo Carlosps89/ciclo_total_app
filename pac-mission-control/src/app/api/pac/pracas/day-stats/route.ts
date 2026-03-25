@@ -4,8 +4,9 @@ import { COMMON_CTES } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { getPracaSqlMapper } from '@/lib/pracas';
 import { ResultSet, ColumnInfo, Row } from '@aws-sdk/client-athena';
+import { getClientAthenaFilter } from '@/lib/client-filter';
 
-const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 const META_H = 46.5333; // 46h32m
 
 // Usando getSchemaMap global de @/lib/athena
@@ -15,8 +16,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         const { searchParams } = new URL(request.url);
         const terminal = searchParams.get('terminal') || 'TRO';
         const produto = searchParams.get('produto');
+        const cliente = searchParams.get('cliente');
 
-        const cacheKey = `pac_pracas_day_stats_${terminal}_${produto || 'all'}`;
+        const cacheKey = `pac_pracas_day_stats_v2_${terminal}_${produto || 'all'}_${cliente || 'all'}`;
         const cachedData = getCached<any>(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
@@ -32,6 +34,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const endDay = `${ymd} 23:59:59`;
 
         const produtoFilter = produto ? `AND c.produto = '${produto}'` : '';
+        const clienteFilter = getClientAthenaFilter(terminal, cliente, 'c.cliente');
         const pracaMapper = getPracaSqlMapper(terminal, 'c.origem');
 
         const query = `
@@ -46,6 +49,7 @@ export async function GET(request: Request): Promise<NextResponse> {
                 WHERE c.peso_saida >= timestamp '${startDay}' 
                   AND c.peso_saida <= timestamp '${endDay}'
                   ${produtoFilter}
+                  ${clienteFilter}
                 GROUP BY 1
             )
             SELECT * FROM grouped_stats

@@ -3,6 +3,7 @@ import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
+import { getClientAthenaFilter } from '@/lib/client-filter';
 
 // Helper to get BRT components (Same as in ciclo-total)
 function getBRTComponents(date: Date): { full: string; ymd: string; h: string; m: string; s: string; year: string; month: string; day: string } {
@@ -20,11 +21,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     const terminal: string = searchParams.get('terminal') || 'TRO';
     const bucket: string = searchParams.get('bucket') || '';
     const produto: string | null = searchParams.get('produto');
+    const cliente: string | null = searchParams.get('cliente');
     
     // Default limit
     const limit = 50;
 
-    const cacheKey = `pac_antecip_bucket_v2_${terminal}_${bucket}_${produto || 'all'}`;
+    const cacheKey = `pac_antecip_bucket_v3_${terminal}_${bucket}_${produto || 'all'}_${cliente || 'all'}`;
     const cachedData = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
@@ -40,6 +42,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .then((cols: string[]) => getCleanMap(cols));
       
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
+    const clienteFilterRaw = getClientAthenaFilter(terminal, cliente, map.cliente);
 
     const now: Date = new Date();
     const brt = getBRTComponents(now); // D0
@@ -99,6 +102,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}"
           WHERE ${map.terminal} = '${terminal}'
             ${produtoFilterRaw}
+            ${clienteFilterRaw}
       ),
       dedupped AS (
           SELECT * FROM (
