@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { runQuery } from "@/lib/athena"; 
+import { runQuery, getAthenaView, getAthenaDatabase } from "@/lib/athena"; 
 import { getCached, setCached } from "@/lib/cache";
 
 type DrillItem = {
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
         CAST(origem AS varchar) AS origem,
         try_cast(janela_agendamento AS timestamp) AS janela,
         CAST(evento AS varchar) AS evento
-      FROM "db_gmo_trusted"."vw_ciclo"
+      FROM "${getAthenaDatabase()}"."${getAthenaView()}"
       WHERE terminal = '${terminal}'
         AND try_cast(janela_agendamento AS timestamp) >= from_iso8601_timestamp('${startIso}')
         AND try_cast(janela_agendamento AS timestamp) < date_add('hour', 1, from_iso8601_timestamp('${startIso}'))

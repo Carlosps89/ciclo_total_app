@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery } from '@/lib/athena';
+import { runQuery, getAthenaDatabase, getAthenaView } from '@/lib/athena';
 import { getMunicipiosByPraca, sqlNormalizeExpr, normalizeCity } from '@/lib/pracas';
 import { getCached, setCached } from '@/lib/cache';
 
@@ -21,9 +21,9 @@ export async function GET(request: Request) {
         // They are already normalized by normalizeCity when ingested from Excel, but we map them just to be safe in the output format.
         const municipiosNorm = municipiosRaw.map(m => m);
 
-        // Fetch sample of origens from today from VW_Ciclo
-        const ATHENA_DATABASE = process.env.ATHENA_DATABASE;
-        const TARGET_VIEW = process.env.ATHENA_VIEW || 'vw_ciclo';
+        // Fetch sample of origens from today from snapshot
+        const ATHENA_DATABASE = getAthenaDatabase();
+        const TARGET_VIEW = getAthenaView();
 
         const sqlSample = `
             SELECT DISTINCT origem 

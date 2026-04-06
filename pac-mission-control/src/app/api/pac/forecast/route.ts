@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
+
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -16,12 +18,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const cachedData = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    const TARGET_VIEW: string = 'VW_Ciclo';
-
-    const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
-    
-    const map: Record<string, string> = getCleanMap(rawCols);
+    const TARGET_VIEW: string = getAthenaView();
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
+    const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
+    const rawCols = Object.keys(map); // Schema map keys are the actual columns
     
     // Additional dynamic mappings for movement and granular status
     const colMovimento = rawCols.find(c => ['MOVIMENTO', 'DS_MOVIMENTO', 'TIPO_MOVIMENTO'].includes(c.toUpperCase()));
@@ -72,7 +72,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ),
       dedupped AS (
           SELECT * FROM (
-              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
+              SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
               FROM raw_data
           ) WHERE rn = 1
       ),
@@ -105,27 +105,27 @@ export async function GET(request: Request): Promise<NextResponse> {
               WHEN try_cast(_col_cheguei as timestamp) IS NOT NULL THEN 'Fila Externa'
               ELSE 'Programado'
             END as status_operacional,
-            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), date_add('hour', -4, now())) / 3600.0 as tempo_status_h,
-            date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)), date_add('hour', -4, now())) / 3600.0 as tempo_acumulado_h
+            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as tempo_status_h,
+            date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as tempo_acumulado_h
           FROM active
           WHERE 
             (
-              -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
-              (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -5, now()))
+              -- Ghost Removal: if it entered the terminal, it must be in the last 3 days
+              (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
               OR
               -- Or it is a future/recent appt
-              (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -5, now()) AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, now()))
+              (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo') AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
             )
             AND (
               -- Stage specific filters to avoid old ghosts/stuck vehicles
               CASE 
-                WHEN _col_cheguei IS NOT NULL AND _col_chamada IS NULL THEN date_diff('hour', try_cast(_col_cheguei as timestamp), date_add('hour', -4, now())) <= 48
+                WHEN _col_cheguei IS NOT NULL AND _col_chamada IS NULL THEN date_diff('hour', try_cast(_col_cheguei as timestamp), current_timestamp AT TIME ZONE 'America/Sao_Paulo') <= 48
                 ELSE true
               END
             )
             AND (
               try_cast(_col_cheguei as timestamp) IS NOT NULL -- This is any stage from Fila Externa onwards
-              OR try_cast(_col_janela as timestamp) >= date_add('hour', -24, date_add('hour', -4, now()))
+              OR try_cast(_col_janela as timestamp) >= date_add('hour', -24, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
             )
       ),
       benchmarks AS (
@@ -177,14 +177,14 @@ export async function GET(request: Request): Promise<NextResponse> {
         ),
         dedup AS (
           SELECT * FROM (
-            SELECT *, row_number() OVER (PARTITION BY id ORDER BY greatest(
+            SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY id ORDER BY greatest(
               coalesce(try_cast(ps as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(ag as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(em as timestamp), timestamp '1900-01-01 00:00:00')
-            ) DESC) as rn FROM raw_data
+            ) DESC) as rn`} FROM raw_data
           ) WHERE rn = 1
         ),
         canceled_ids AS (
@@ -215,8 +215,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'Fila Externa'
             ELSE 'Programado'
           END as status,
-          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), date_add('hour', -4, now())) / 3600.0 as horas,
-          date_diff('second', coalesce(try_cast(em as timestamp), try_cast(ag as timestamp)), date_add('hour', -4, now())) / 3600.0 as horas_acumuladas,
+          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as horas,
+          date_diff('second', coalesce(try_cast(em as timestamp), try_cast(ag as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as horas_acumuladas,
           cast(em as varchar) as dt_emissao,
           cast(ag as varchar) as dt_agendamento,
           cast(ch as varchar) as dt_cheguei,
@@ -226,21 +226,21 @@ export async function GET(request: Request): Promise<NextResponse> {
         FROM active
         WHERE 
           (
-            -- Ghost Removal: if it entered the terminal, it must be in the last 5 days
-            (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -5, now()))
+            -- Ghost Removal: if it entered the terminal, it must be in the last 3 days
+            (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
             OR
             -- Or it is a future/recent appt
-            (ts_last_event = timestamp '1900-01-01' AND try_cast(ag as timestamp) >= date_add('day', -5, now()) AND try_cast(ag as timestamp) <= date_add('day', 3, now()))
+            (ts_last_event = timestamp '1900-01-01' AND try_cast(ag as timestamp) >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo') AND try_cast(ag as timestamp) <= date_add('day', 3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
           )
           AND (
             CASE 
-              WHEN try_cast(ch as timestamp) IS NOT NULL AND try_cast(cda as timestamp) IS NULL THEN date_diff('hour', try_cast(ch as timestamp), date_add('hour', -4, now())) <= 48
+              WHEN try_cast(ch as timestamp) IS NOT NULL AND try_cast(cda as timestamp) IS NULL THEN date_diff('hour', try_cast(ch as timestamp), current_timestamp AT TIME ZONE 'America/Sao_Paulo') <= 48
               ELSE true
             END
           )
           AND (
             try_cast(ch as timestamp) IS NOT NULL
-            OR try_cast(jan as timestamp) >= date_add('hour', -24, date_add('hour', -4, now()))
+            OR try_cast(jan as timestamp) >= date_add('hour', -24, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
           )
         LIMIT 1000
       `)
@@ -303,7 +303,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       vehicles
     };
 
-    setCached(cacheKey, response);
+    setCached(cacheKey, response, CACHE_TTL);
     return NextResponse.json(response);
 
   } catch (error) {

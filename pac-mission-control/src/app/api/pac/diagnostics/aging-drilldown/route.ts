@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 
@@ -18,10 +18,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const cachedData = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    const TARGET_VIEW = 'VW_Ciclo';
-    const map = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: any) => res?.ResultSetMetadata?.ColumnInfo?.map((c: any) => c.Name).filter(Boolean) || [])
-      .then(cols => getCleanMap(cols));
+    const TARGET_VIEW = getAthenaView();
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
+    const map = await getSchemaMap(TARGET_VIEW);
 
     const extraFilters = produto ? `AND ${map.produto} = '${produto}'` : '';
     
@@ -41,7 +40,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             try_cast(${map.dt_emissao} as timestamp) as dt_em,
             try_cast(${map.dt_agendamento} as timestamp) as dt_ag,
             try_cast(${map.janela_agendamento} as timestamp) as dt_ja,
-            row_number() OVER (PARTITION BY ${map.id} ORDER BY coalesce(try_cast(${map.dt_peso_saida} as timestamp), try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_chamada} as timestamp), try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) DESC) as rn
+            ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY ${map.id} ORDER BY coalesce(try_cast(${map.dt_peso_saida} as timestamp), try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_chamada} as timestamp), try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) DESC) as rn`}
         FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
         WHERE (base.${map.terminal} = '${terminal}' OR (base.${map.terminal} IS NULL AND '${terminal}' = 'TRO'))
           ${extraFilters}

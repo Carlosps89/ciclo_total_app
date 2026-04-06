@@ -1,5 +1,4 @@
-import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
@@ -27,12 +26,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         const cachedData = getCached(cacheKey);
         if (cachedData) return NextResponse.json(cachedData);
 
-        const TARGET_VIEW: string = 'VW_Ciclo';
-
-        // Cast to any to avoid strict type checks on dynamic map properties
-        const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-            .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-            .then((cols: string[]) => getCleanMap(cols));
+        const TARGET_VIEW: string = getAthenaView();
+        const isCleanData = TARGET_VIEW === 'pac_clean_data';
+        const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
 
         const startDay: string = `${brt.ymd} 00:00:00`;
         const endDay: string = `${brt.ymd} 23:59:59`;

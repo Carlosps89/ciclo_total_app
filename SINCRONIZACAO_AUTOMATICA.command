@@ -29,12 +29,12 @@ do
   npx tsx scripts/sync-snapshot.ts
   
   if [ $? -eq 0 ]; then
-    echo "[$(date +%T)] ✅ Sucesso! Próxima atualização em 30 minutos."
+    echo "[$(date +%T)] ✅ Sucesso! Próxima atualização em 15 minutos."
   else
     echo "[$(date +%T)] ❌ Houve um erro na sincronização."
     echo "Verifique sua conexão VPN/AWS ou se o banco está acessível."
   fi
   
   echo "----------------------------------------------------------"
-  sleep 1800
+  sleep 900
 done

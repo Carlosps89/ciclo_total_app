@@ -4,17 +4,25 @@ import { resolve } from "path";
 // Load environment variables from .env.local
 dotenv.config({ path: resolve(__dirname, "../.env.local") });
 
-import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from "../src/lib/athena";
+import { runQuery, ATHENA_DATABASE } from "../src/lib/athena";
 
 /**
- * Syncs the last 4 hours of data from the raw view to the clean data table.
- * We use 4 hours to ensure we catch any updates to recent records.
+ * Performs a full cleanup and reseed of the pac_clean_data table.
+ * This is used to apply new partitioning logic (e.g. 'ACTIVE' partition for null departures).
  */
-async function syncLatestData() {
-    console.log("Starting hourly sync for pac_clean_data...");
+async function reseedTable() {
+    console.log("!!! STARTING FULL RESEED OF pac_clean_data !!!");
 
-    const sql = `
-        INSERT INTO "${ATHENA_DATABASE}"."pac_clean_data"
+    const dropTable = `DROP TABLE IF EXISTS ${ATHENA_DATABASE}.pac_clean_data`;
+    
+    // Using the same structure as the original sync but ensuring dt is never null.
+    // Partitioning by 'dt' ensures efficient cleanup by dropping partitions.
+    const createTable = `
+        CREATE TABLE ${ATHENA_DATABASE}.pac_clean_data
+        WITH (
+          format = 'PARQUET',
+          partitioned_by = ARRAY['dt']
+        ) AS
         WITH raw_data AS (
             SELECT *,
                 greatest(
@@ -23,12 +31,12 @@ async function syncLatestData() {
                         coalesce(try_cast(agendamento as timestamp), timestamp '1900-01-01 00:00:00'),
                         coalesce(try_cast(emissao_nota as timestamp), timestamp '1900-01-01 00:00:00')
                 ) as ts_ult
-            FROM "${ATHENA_DATABASE}"."vw_ciclo"
+            FROM ${ATHENA_DATABASE}.vw_ciclo
             WHERE (
                 try_cast(peso_saida as timestamp) >= date_add('day', -7, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
                 try_cast(cheguei as timestamp) >= date_add('day', -7, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
                 try_cast(agendamento as timestamp) >= date_add('day', -7, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
-                try_cast(janela_agendamento as timestamp) >= date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo') -- Include upcoming logic
+                try_cast(janela_agendamento as timestamp) >= date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
             )
         ),
         dedupped AS (
@@ -41,19 +49,19 @@ async function syncLatestData() {
             *,
             coalesce(format_datetime(try_cast(peso_saida as timestamp), 'yyyy-MM-dd'), 'ACTIVE') as dt
         FROM dedupped
-        WHERE NOT EXISTS (
-            SELECT 1 FROM "${ATHENA_DATABASE}"."pac_clean_data" target 
-            WHERE target.gmo_id = dedupped.gmo_id 
-              AND target.dt = coalesce(format_datetime(try_cast(dedupped.peso_saida as timestamp), 'yyyy-MM-dd'), 'ACTIVE')
-        )
     `;
 
     try {
-        const result = await runQuery(sql);
-        console.log("Sync completed successfully:", result);
+        console.log("Step 1: Dropping old table...");
+        await runQuery(dropTable);
+        
+        console.log("Step 2: Recreating and loading data (this may take a minute)...");
+        const result = await runQuery(createTable);
+        
+        console.log("FULL RESEED COMPLETED SUCCESSFULLY:", result);
     } catch (e) {
-        console.error("Sync failed:", e);
+        console.error("RESEED FAILED:", e);
     }
 }
 
-syncLatestData();
+reseedTable();

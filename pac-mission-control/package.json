@@ -8,7 +8,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "worker:bot": "tsx src/workers/tg-agent-worker.ts"
+    "worker:bot": "tsx src/workers/tg-agent-worker.ts",
+    "worker:whatsapp": "tsx src/workers/whatsapp-worker.ts",
+    "reseed": "tsx scripts/reseed-snapshot.ts",
+    "athena-sync": "tsx scripts/sync-snapshot.ts"
   },
   "dependencies": {
     "@aws-sdk/client-athena": "^3.985.0",
@@ -25,6 +28,9 @@
     "lucide-react": "^0.563.0",
     "maplibre-gl": "^5.18.0",
     "next": "16.1.6",
+    "node-cron": "^4.2.1",
+    "puppeteer": "^24.40.0",
+    "qrcode-terminal": "^0.12.0",
     "quickchart-js": "^3.1.3",
     "react": "19.2.3",
     "react-chartjs-2": "^5.3.1",
@@ -32,6 +38,7 @@
     "react-map-gl": "^8.1.0",
     "tailwind-merge": "^3.4.0",
     "telegraf": "^4.16.3",
+    "whatsapp-web.js": "^1.34.6",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
@@ -40,6 +47,8 @@
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20",
+    "@types/node-cron": "^3.0.11",
+    "@types/qrcode-terminal": "^0.12.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

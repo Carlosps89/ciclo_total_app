@@ -6,7 +6,7 @@ import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 import { getClientAthenaFilter } from '@/lib/client-filter';
 
-const CACHE_TTL: number = 30 * 60 * 1000; // 30 minutes
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
 // Helper to get BRT components
 function getBRTComponents(date: Date): { year: string } {
@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
         // Query: Last 24h Summary
         const query: string = `
-      ${COMMON_CTES(map, terminal, '', parseInt(brt.year))}
+      ${COMMON_CTES(map, terminal, '')}
       ${pracaFilterMain.cte}
       SELECT
         -- Aguardando Agendamento
@@ -76,8 +76,8 @@ export async function GET(request: Request): Promise<NextResponse> {
         ${clienteFilterCalc}
     `;
 
-        // Parallel: Meta Query (Max Timestamps) using VW_Ciclo for Global Freshness
-        const TARGET_VIEW_META: string = 'VW_Ciclo';
+        // Parallel: Meta Query (Max Timestamps) using optimized view for Global Freshness
+        const TARGET_VIEW_META: string = ATHENA_VIEW;
         const mapMeta: Record<string, string> = await getSchemaMap(TARGET_VIEW_META);
 
         const pracaFilterMeta = applyPracaFilter(terminal, praca, `base.${mapMeta.origem}`, true);

@@ -74,7 +74,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         });
 
         const query: string = `
-            ${COMMON_CTES(map, terminal, '', parseInt(brt.year))}
+            ${COMMON_CTES(map, terminal, '')}
             ${pracaFilter.cte}
             , today_stats as (
                  SELECT
@@ -147,7 +147,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             }
         };
 
-        setCached(CACHE_KEY, response, 30 * 60 * 1000);
+        setCached(CACHE_KEY, response, 15 * 60 * 1000);
         return NextResponse.json(response);
     } catch (error) {
         console.error("Ciclo Total API Error:", error);

@@ -3,7 +3,7 @@ import { runQuery, ATHENA_VIEW, ATHENA_DATABASE, getSchemaMap } from '@/lib/athe
 import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
 
-const CACHE_TTL: number = 6 * 60 * 60 * 1000; // 6 hours
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {

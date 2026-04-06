@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
      };
 
      // Set Cache (15 min)
-     setCached(CACHE_KEY, response, 30 * 60 * 1000);
+     setCached(CACHE_KEY, response, 15 * 60 * 1000);
      
      return Response.json(response);
      

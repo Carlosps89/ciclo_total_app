@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
@@ -34,12 +34,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         return NextResponse.json({ error: 'Bucket Required' }, { status: 400 });
     }
 
-    const TARGET_VIEW: string = 'VW_Ciclo';
-
-    // Cast to any to avoid strict type checks on dynamic map properties
-    const map: Record<string, string> = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-      .then((cols: string[]) => getCleanMap(cols));
+    const TARGET_VIEW: string = getAthenaView();
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
+    const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
       
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
     const clienteFilterRaw = getClientAthenaFilter(terminal, cliente, map.cliente);
@@ -106,7 +103,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ),
       dedupped AS (
           SELECT * FROM (
-              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
+              SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
               FROM raw_data
           ) WHERE rn = 1
       ),

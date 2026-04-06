@@ -123,8 +123,10 @@ export interface AnticipationResponse {
         now_sp_iso: string;
         d0: { hour: number; count: number }[];
         d1: { hour: number; count: number }[];
+        d2: { hour: number; count: number }[];
         d0_total: number;
         d1_total: number;
+        d2_total: number;
     };
     rolling_windows?: {
         hour_rel: number;

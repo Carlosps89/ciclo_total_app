@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
@@ -27,14 +27,10 @@ export async function GET(request: Request) {
     const cachedData = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    const TARGET_VIEW: string = 'VW_Ciclo';
-
-    const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: any) => res?.ResultSetMetadata?.ColumnInfo?.map((c: any) => c.Name).filter((n: any): n is string => !!n) || []);
-
-    const map = getCleanMap(rawCols);
-    const mapTrx = getCleanMap(rawCols);
-    const mapTro = getCleanMap(rawCols);
+    const TARGET_VIEW: string = getAthenaView();
+    const map = await getSchemaMap(TARGET_VIEW);
+    const mapTrx = map;
+    const mapTro = map;
 
     const pracaObj = applyPracaFilter(terminal as any, praca, `base.${map.origem}`, true);
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';

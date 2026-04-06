@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
 import { getClientAthenaFilter } from '@/lib/client-filter';
 
-const CACHE_TTL: number = 30 * 60 * 1000; // 30 minutes
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -22,10 +22,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const cachedData: unknown = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    // Switch to VW_Ciclo for data consistency
-    const TARGET_VIEW: string = 'VW_Ciclo';
-
-    // Build schema map for VW_Ciclo (Cached separately for 6h in lib/athena)
+    const TARGET_VIEW: string = getAthenaView();
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
     const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
 
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
@@ -75,8 +73,10 @@ export async function GET(request: Request): Promise<NextResponse> {
       ),
       dedupped AS (
           SELECT * FROM (
-              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
-              FROM raw_data
+            SELECT 
+              *,
+              ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
+            FROM raw_data
           ) WHERE rn = 1
       ),
       calc AS (
@@ -136,7 +136,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         c.peso_saida as dt_peso_saida
         
       FROM calc c
-      WHERE c.peso_saida > date_add('day', -1, date_add('hour', -4, now()))
+      WHERE c.peso_saida > date_add('day', -1, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
       AND c.ciclo_total_h > ${minThreshold} 
       ORDER BY total_val_h ${sortDir}
       LIMIT 25

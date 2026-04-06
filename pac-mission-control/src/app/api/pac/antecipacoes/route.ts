@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE, getSchemaMap } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getSchemaMap, getAthenaView } from '@/lib/athena';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { AnticipationResponse } from '@/lib/types';
@@ -26,14 +26,15 @@ export async function GET(request: Request): Promise<NextResponse> {
     const cliente: string | null = searchParams.get('cliente');
     const debug: string | null = searchParams.get('debug');
 
-    // Build schema map for VW_Ciclo (Cached separately for 6h in lib/athena)
-    const TARGET_VIEW: string = 'VW_Ciclo';
+    // Build schema map for optimized view
+    const TARGET_VIEW: string = getAthenaView();
 
     const now: Date = new Date();
     const brt = getBRTComponents(now); // D0
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
 
     // CACHE LAYER (15 min)
-    const CACHE_TTL: number = 30 * 60 * 1000;
+    const CACHE_TTL: number = 15 * 60 * 1000;
     const CACHE_KEY: string = `pac_antecipacoes_v3_${terminal}_${produto || 'all'}_${praca || 'all'}_${cliente || 'all'}`;
     const cachedData = getCached<any>(CACHE_KEY);
     if (cachedData) {
@@ -52,8 +53,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Let's cap at D+1 End to be safe and consistent with "D vs D+1".
     const tmr: Date = new Date(now);
     tmr.setDate(tmr.getDate() + 1);
+    const d2: Date = new Date(now);
+    d2.setDate(d2.getDate() + 2);
+
     const brtTmr = getBRTComponents(tmr); // D1
+    const brtD2 = getBRTComponents(d2);   // D2
     const endNextDay: string = `${brtTmr.ymd} 23:59:59`;
+    const endD2: string = `${brtD2.ymd} 23:59:59`;
     
     const produtoFilterRaw = produto ? `AND ${map.produto} = '${produto}'` : '';
     const clienteFilterRaw = getClientAthenaFilter(terminal, cliente, `base.${map.cliente}`);
@@ -67,7 +73,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           base_agora: { count_total: 0 },
           top_origens: [],
           histogram: [],
-          window_bars: { now_sp_iso: brt.full, d0: [], d1: [], d0_total: 0, d1_total: 0 },
+          window_bars: { now_sp_iso: brt.full, d0: [], d1: [], d2: [], d0_total: 0, d1_total: 0, d2_total: 0 },
           debug_praca_warning: pracaFilterRaw.warning
         };
         return NextResponse.json(response);
@@ -101,12 +107,21 @@ export async function GET(request: Request): Promise<NextResponse> {
           FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
           ${pracaFilterRaw.join}
           WHERE base.${map.terminal} = '${terminal}'
+            ${isCleanData ? `AND dt IN ('ACTIVE', 
+                format_datetime(date_add('day', -1, now()), 'yyyy-MM-dd'),
+                format_datetime(date_add('day', -2, now()), 'yyyy-MM-dd'),
+                format_datetime(date_add('day', -3, now()), 'yyyy-MM-dd'),
+                format_datetime(date_add('day', -4, now()), 'yyyy-MM-dd'),
+                format_datetime(date_add('day', -5, now()), 'yyyy-MM-dd'),
+                format_datetime(date_add('day', -6, now()), 'yyyy-MM-dd'),
+                format_datetime(now(), 'yyyy-MM-dd')
+            )` : ''}
             ${produtoFilterRaw.replace(map.produto, `base.${map.produto}`)}
             ${clienteFilterRaw}
       ),
       dedupped AS (
           SELECT * FROM (
-              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
+              SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
               FROM raw_data
           ) WHERE rn = 1
       ),
@@ -122,23 +137,24 @@ export async function GET(request: Request): Promise<NextResponse> {
               try_cast(_col_agendamento as timestamp) as dt_agendamento
           FROM dedupped
       )
-      , arrivals_today AS (
+      , universe AS (
           SELECT 
             *,
             CASE WHEN cheguei < janela_agendamento THEN 1 ELSE 0 END as is_early,
             date_diff('second', cheguei, janela_agendamento) / 3600.0 as hours_early,
-            -- Rolling Hour Offset from "Current Hour Start"
+            -- Rolling Hour Offset from "Current Hour Start" for the Distribution Chart
             date_diff('hour', timestamp '${brt.ymd} ${brt.h}:00:00', janela_agendamento) as h_rel,
             -- D vs D+1 Flag (Legacy support)
             CASE 
                 WHEN date(janela_agendamento) = date(timestamp '${startDay}') THEN 'D0'
                 WHEN date(janela_agendamento) = date(timestamp '${startDay}') + interval '1' day THEN 'D1'
+                WHEN date(janela_agendamento) = date(timestamp '${startDay}') + interval '2' day THEN 'D2'
                 ELSE 'OTHER'
             END as window_day
           FROM calc
-          WHERE cheguei >= timestamp '${startDay}' 
-            AND cheguei <= timestamp '${endNextDay}'
-            AND janela_agendamento IS NOT NULL
+          WHERE cheguei IS NOT NULL -- Must have arrived (Status 'Cheguei')
+            AND janela_agendamento >= timestamp '${startDay}' -- Window is Today
+            AND janela_agendamento <= timestamp '${endD2}' -- UP TO D+2 (72H)
       )
       -- Aggregations
       , agg_global AS (
@@ -146,15 +162,16 @@ export async function GET(request: Request): Promise<NextResponse> {
            count(distinct gmo_id) as total_arrivals_unique,
            count(CASE WHEN window_day = 'D0' THEN 1 END) as total_d,
            count(CASE WHEN window_day = 'D1' THEN 1 END) as total_d1,
+           count(CASE WHEN window_day = 'D2' THEN 1 END) as total_d2,
            count(CASE WHEN is_early = 1 THEN 1 END) as total_early,
            count(CASE WHEN peso_saida IS NOT NULL THEN 1 END) as total_finished_subset,
            avg(CASE WHEN is_early = 1 THEN hours_early END) as avg_early_h,
            max(CASE WHEN is_early = 1 THEN hours_early END) as max_early_h
-        FROM arrivals_today
+        FROM universe
       )
       , agg_origins AS (
         SELECT origem, count(distinct gmo_id) as cnt 
-        FROM arrivals_today 
+        FROM universe 
         WHERE is_early = 1
         GROUP BY 1 
         ORDER BY 2 DESC 
@@ -164,7 +181,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         SELECT 
            cast(floor(hours_early) as int) as h_bin, 
            count(distinct gmo_id) as cnt
-        FROM arrivals_today
+        FROM universe
         WHERE is_early = 1
         GROUP BY 1
       )
@@ -173,7 +190,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             h_rel,
             count(distinct gmo_id) as cnt_win,
             min(janela_agendamento) as sample_ts
-         FROM arrivals_today
+         FROM universe
          WHERE h_rel >= 0 AND h_rel < 48
          GROUP BY 1
       )
@@ -182,7 +199,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             window_day,
             hour(janela_agendamento) as h_window,
             count(distinct gmo_id) as cnt_win
-         FROM arrivals_today
+         FROM universe
          WHERE window_day IN ('D0', 'D1')
          GROUP BY 1, 2
       )
@@ -194,23 +211,24 @@ export async function GET(request: Request): Promise<NextResponse> {
              cast(total_early as varchar) as v4, 
              cast(avg_early_h as varchar) as v5, 
              cast(max_early_h as varchar) as v6,
-             cast(total_finished_subset as varchar) as v7
+             cast(total_finished_subset as varchar) as v7,
+             cast(total_d2 as varchar) as v8
       FROM agg_global
       UNION ALL
-      SELECT 'ORIGIN' as type, origem as v1, cast(cnt as varchar) as v2, '' as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_origins
+      SELECT 'ORIGIN' as type, origem as v1, cast(cnt as varchar) as v2, '' as v3, '' as v4, '' as v5, '' as v6, '' as v7, '' as v8 FROM agg_origins
       UNION ALL
-      SELECT 'HIST_RAW' as type, cast(h_bin as varchar) as v1, cast(cnt as varchar) as v2, '' as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_hist_raw
+      SELECT 'HIST_RAW' as type, cast(h_bin as varchar) as v1, cast(cnt as varchar) as v2, '' as v3, '' as v4, '' as v5, '' as v6, '' as v7, '' as v8 FROM agg_hist_raw
       UNION ALL
-      SELECT 'WINDOW_LEGACY' as type, window_day as v1, cast(h_window as varchar) as v2, cast(cnt_win as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_windows_legacy
+      SELECT 'WINDOW_LEGACY' as type, window_day as v1, cast(h_window as varchar) as v2, cast(cnt_win as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7, '' as v8 FROM agg_windows_legacy
       UNION ALL
-      SELECT 'WINDOW_ROLLING' as type, cast(h_rel as varchar) as v1, cast(cnt_win as varchar) as v2, cast(sample_ts as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7 FROM agg_windows_rolling
+      SELECT 'WINDOW_ROLLING' as type, cast(h_rel as varchar) as v1, cast(cnt_win as varchar) as v2, cast(sample_ts as varchar) as v3, '' as v4, '' as v5, '' as v6, '' as v7, '' as v8 FROM agg_windows_rolling
     `;
 
     const results: ResultSet | undefined = await runQuery(query);
     const rows: AthenaRow[] = (results?.Rows?.slice(1) || []) as AthenaRow[];
 
 
-    let total_arrivals_unique: number = 0, total_d: number = 0, total_d1: number = 0, total_early: number = 0, total_finished: number = 0, avg_early_h: number = 0;
+    let total_arrivals_unique: number = 0, total_d: number = 0, total_d1: number = 0, total_d2: number = 0, total_early: number = 0, total_finished: number = 0, avg_early_h: number = 0;
     const top_origens: { origem: string; count: number }[] = [];
     const hist_raw: Record<number, number> = {};
     const win_legacy: Record<string, number> = {}; 
@@ -236,6 +254,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         avg_early_h = parseFloat(data[5] || '0');
         max_early_h_actual = Math.max(24, Math.ceil(parseFloat(data[6] || '0')));
         total_finished = parseInt(data[7] || '0');
+        total_d2 = parseInt(data[8] || '0');
       } else if (type === 'ORIGIN') {
         top_origens.push({ origem: data[1], count: parseInt(data[2]) });
       } else if (type === 'HIST_RAW') {
@@ -286,11 +305,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       });
     }
 
-    // 48h Rolling Window
+    // 72h Rolling Window (D+2 Support)
     const rolling: { hour_rel: number; label: string; count: number; ts: string; day_offset: number }[] = [];
     const currentHour = parseInt(brt.h);
     
-    for (let i = 0; i < 48; i++) {
+    for (let i = 0; i < 72; i++) {
         const absoluteHour = currentHour + i;
         const day_offset = Math.floor(absoluteHour / 24);
         const h_label = absoluteHour % 24;
@@ -305,10 +324,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     // Legacy buckets (still return for backwards compatibility if needed)
-    const d0: { hour: number; count: number }[] = [], d1: { hour: number; count: number }[] = [];
+    const d0: { hour: number; count: number }[] = [], d1: { hour: number; count: number }[] = [], d2_bars: { hour: number; count: number }[] = [];
     for (let h: number = 0; h < 24; h++) {
       d0.push({ hour: h, count: win_legacy[`D0-${h}`] || 0 });
       d1.push({ hour: h, count: win_legacy[`D1-${h}`] || 0 });
+      d2_bars.push({ hour: h, count: win_legacy[`D2-${h}`] || 0 });
     }
 
     console.log(`[ANTECIPACOES-UNIVERSE] Total=${total_arrivals_unique} D0=${total_d} D1=${total_d1} Early=${total_early} FinishedSubset=${total_finished}`);
@@ -328,8 +348,10 @@ export async function GET(request: Request): Promise<NextResponse> {
         now_sp_iso: brt.full,
         d0,
         d1,
+        d2: d2_bars,
         d0_total: total_d,
-        d1_total: total_d1
+        d1_total: total_d1,
+        d2_total: total_d2
       },
       rolling_windows: rolling
     };

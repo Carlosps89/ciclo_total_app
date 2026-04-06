@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap, COMMON_CTES } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { ResultSet } from '@aws-sdk/client-athena';
+
+const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
 
 export async function GET(request: Request): Promise<NextResponse> {
   try {
@@ -21,11 +23,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     const cachedData = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    const TARGET_VIEW = 'VW_Ciclo';
-
-    const map = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || [])
-      .then(cols => getCleanMap(cols));
+    const TARGET_VIEW = getAthenaView();
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
+    const map = await getSchemaMap(TARGET_VIEW);
 
     const extraFilters = produto ? `AND ${map.produto} = '${produto}'` : '';
     
@@ -50,9 +50,18 @@ export async function GET(request: Request): Promise<NextResponse> {
             try_cast(${map.dt_emissao} as timestamp) as dt_em,
             try_cast(${map.dt_agendamento} as timestamp) as dt_ag,
             try_cast(${map.janela_agendamento} as timestamp) as dt_ja_raw,
-            row_number() OVER (PARTITION BY ${map.id} ORDER BY coalesce(try_cast(${map.dt_peso_saida} as timestamp), try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_chamada} as timestamp), try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) DESC) as rn
+            ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY ${map.id} ORDER BY coalesce(try_cast(${map.dt_peso_saida} as timestamp), try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_chamada} as timestamp), try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) DESC) as rn`}
         FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
         WHERE (base.${map.terminal} = '${terminal}' OR (base.${map.terminal} IS NULL AND '${terminal}' = 'TRO'))
+          ${isCleanData ? `AND dt IN ('ACTIVE', 
+              format_datetime(date_add('day', -1, now()), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -2, now()), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -3, now()), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -4, now()), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -5, now()), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -6, now()), 'yyyy-MM-dd'),
+              format_datetime(now(), 'yyyy-MM-dd')
+          )` : ''}
           ${extraFilters}
           ${dateFilter}
           AND try_cast(${map.dt_emissao} as timestamp) IS NOT NULL
@@ -108,7 +117,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     });
 
     const response = { buckets: chartData };
-    setCached(cacheKey, response);
+    setCached(cacheKey, response, CACHE_TTL);
     return NextResponse.json(response);
   } catch (error: any) {
     console.error('[Aging API]', error);

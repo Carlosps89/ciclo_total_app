@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
@@ -48,12 +48,9 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     const whitelistStr = searchParams.get('whitelist') || '';
 
-    const TARGET_VIEW: string = 'VW_Ciclo';
+    const TARGET_VIEW: string = getAthenaView();
+    const map = await getSchemaMap(TARGET_VIEW);
 
-    const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
-
-    const map: Record<string, string> = getCleanMap(rawCols);
 
     const whitelistCondition = whitelistStr
       ? `AND id NOT IN (${whitelistStr.split(',').map((id: string) => `'${id.trim()}'`).join(',')})`

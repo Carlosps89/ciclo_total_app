@@ -31,40 +31,45 @@ export async function processAgentCommand(command: string, audio?: { buffer: Buf
   const modelName = "gemini-flash-latest";
   const db = getAthenaDatabase();
   const table = getAthenaView();
+  const isCleanData = table === 'pac_clean_data';
   
-  console.log(`[Agent] Iniciando processamento com o modelo: ${modelName}`);
+  console.log(`[Agent] Iniciando processamento com o modelo: ${modelName} (${isCleanData ? 'Snapshot' : 'Live'})`);
   
   const model = genAI.getGenerativeModel({ model: modelName });
 
   const prompt = `
-    Você é o "PAC Insight", o assistente analista sênior da Rumo SLog.
-    Sua missão: Converter perguntas em SQL analítico e insights para o AWS Athena.
+    Você é o "PAC Insight", a inteligência analítica oficial do PAC MISSION (Rumo SLog).
+    Sua missão: Fornecer os MESMOS números e diagnósticos do Dashboard Web.
 
-    DATABASE: "${db}"
-    TABLE/VIEW: "${table}"
+    AMBIENTE:
+    - Database: "${db}"
+    - Tabela/Snapshot: "${table}"
+    - Modo: ${isCleanData ? 'ALTA PERFORMANCE (Parquet)' : 'LEGACY (v1)'}
 
-    REGRAS DE ANÁLISE POR ETAPA:
-    - Se o usuário pedir para "detalhar", "comparar etapas" ou "entender o ciclo" de um terminal específico (ex: TRO):
-      1. Gere um SQL que traga as MÉDIAS das etapas: "aguardando_agendamento_h", "tempo_viagem_h" e "ciclo_interno_h".
-      2. Compare os valores para identificar qual é o maior "ofensor" (gargalo).
-    - Métrica de Suporte: "ciclo_total_h" é a soma das etapas.
-
-    REGRAS DE TEMPO:
-    - "Xh de hoje": Filtro de horário na coluna 'peso_saida' ou 'emissao_nota'.
-    - Use 'current_date' para hoje.
+    REGRAS DE OURO (IDENTIDADE COM DASHBOARD):
+    1. ${isCleanData ? 'NÃO use ROW_NUMBER(). Os dados já estão limpos e deduplicados na tabela pac_clean_data.' : 'USE ROW_NUMBER() per gmo_id para deduplicação.'}
+    2. CICLO TOTAL: A métrica principal é 'avg(ciclo_total_h)'.
+    3. TERMINAL PADRÃO: Se o usuário não especificar, use 'TRO'.
+    4. FILTRO DE DATA (PARTIÇÃO): Use SEMPRE a coluna "dt" (varchar). 
+       - Para hoje: \`dt = cast(current_date as varchar)\`
+       - Para ontem: \`dt = cast(current_date - interval '1' day as varchar)\`
+    5. DIAGNÓSTICO POR HORA: Para "o que houve na hora X", use:
+       \`WHERE date_trunc('hour', peso_saida) = timestamp 'YYYY-MM-DD HH:00:00'\`
 
     COLUNAS DISPONÍVEIS:
-    "gmo_id", "emissao_nota", "agendamento", "janela_agendamento", "chegada", "peso_saida", 
-    "ciclo_total_h", "aguardando_agendamento_h", "tempo_viagem_h", "ciclo_interno_h", 
-    "placa_tracao", "terminal", "cliente", "cheguei", "chamada"
+    - gmo_id, terminal, placa_tracao, cliente, produto, origem
+    - peso_saida (timestamp final), dt (partição string YYYY-MM-DD)
+    - ciclo_total_h, tempo_interno_h, tempo_viagem_h, aguardando_agendamento_h
 
-    DEDUPLICAÇÃO OBRIGATÓRIA:
-    Sempre use: ROW_NUMBER() OVER (PARTITION BY gmo_id ORDER BY peso_saida DESC) as rn ... WHERE rn = 1.
+    EXEMPLOS DE CONSULTAS (Siga este estilo):
+    - Ciclo Total: SELECT terminal, avg(ciclo_total_h) as media FROM "${db}"."${table}" WHERE dt = cast(current_date as varchar) GROUP BY 1 ORDER BY 2 DESC
+    - Diagnóstico de Hora: SELECT * FROM "${db}"."${table}" WHERE terminal = 'TRO' AND date_trunc('hour', peso_saida) = timestamp '2026-03-25 14:00:00'
+    - Ranking: SELECT cliente, avg(ciclo_total_h) FROM "${db}"."${table}" WHERE dt >= '2026-03-01' GROUP BY 1 ORDER BY 2 DESC LIMIT 5
 
     SAÍDA ESPERADA (JSON APENAS):
     {
-      "sql": "query aqui",
-      "explanation": "o que você vai analisar",
+      "sql": "query SQL otimizada",
+      "explanation": "o que você está analisando",
       "visualHint": "bar" | "line" | "text" | "histogram"
     }
   `;
@@ -89,9 +94,9 @@ export async function processAgentCommand(command: string, audio?: { buffer: Buf
 
     console.log(`[Agent] SQL Gerado:\n${parsed.sql}`);
 
-    const queryResult = await runQuery(parsed.sql);
+    const queryResult = await runQuery(parsed.sql, 0, 'PAC_INSIGHT_BOT');
     
-    const rows = queryResult?.Rows?.slice(1).map((r: any) => r.Data.map((d: any) => d.VarCharValue)) || [];
+    const rows = queryResult?.Rows?.slice(1).map((r: any) => r.Data!.map((d: any) => d.VarCharValue)) || [];
     const headers = queryResult?.Rows?.[0]?.Data?.map((d: any) => d.VarCharValue) || [];
 
     const analysisPrompt = `
@@ -110,7 +115,7 @@ export async function processAgentCommand(command: string, audio?: { buffer: Buf
     const insightText = finalResult.response.text();
 
     const dataSnapshot = rows.length > 0 
-      ? `\n\n📊 *Resumo dos Dados:*\n\`${headers.join(' | ')}\`\n${rows.slice(0, 5).map(r => `\`${r.join(' | ')}\``).join('\n')}`
+      ? `\n\n📊 *Resumo dos Dados:*\n\`${headers.join(' | ')}\`\n${rows.slice(0, 5).map((r: any) => `\`${r.join(' | ')}\``).join('\n')}`
       : `\n\n⚠️ _Nenhum dado encontrado para os filtros aplicados._`;
 
     const finalResponseText = `

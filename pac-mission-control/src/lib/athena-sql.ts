@@ -13,8 +13,8 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
         coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
       )`;
 
-  // Decide the deduplication logic
-  const deduppedLogic = isCleanData ? 'SELECT * FROM raw_data' : `
+  // Always deduplicate across partitions to handle transition from 'ACTIVE' to daily dates
+  const deduppedLogic = `
       SELECT *
       FROM (
         SELECT 
@@ -47,6 +47,15 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       ${tsUltColumn} as ts_ult
     FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}"
     WHERE ${map.terminal} = '${terminal}'
+    ${isCleanData ? `AND dt IN ('ACTIVE', 
+        format_datetime(date_add('day', -1, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+        format_datetime(date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+        format_datetime(date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+        format_datetime(date_add('day', -4, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+        format_datetime(date_add('day', -5, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+        format_datetime(date_add('day', -6, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+        format_datetime(current_timestamp AT TIME ZONE 'America/Sao_Paulo', 'yyyy-MM-dd')
+    )` : ''}
     ${extraFilters}
   ),
   dedupped AS (

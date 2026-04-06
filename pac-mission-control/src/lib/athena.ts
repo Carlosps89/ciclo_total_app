@@ -52,7 +52,7 @@ export async function getSchemaMap(targetView: string = ATHENA_VIEW): Promise<Re
 }
 
 
-export async function runQuery(query: string, retryCount = 0): Promise<any | undefined> {
+export async function runQuery(query: string, retryCount = 0, appTag: string = 'CCO_Rodo'): Promise<any | undefined> {
     const outputLocation = getOutputLocation();
     if (!outputLocation) {
         throw new Error("ATHENA_OUTPUT_S3 is not defined");
@@ -60,7 +60,7 @@ export async function runQuery(query: string, retryCount = 0): Promise<any | und
 
     try {
         // Tagging query for easier filtering in AWS Console
-        const taggedQuery = `-- APP:CCO_Rodo\n${query}`;
+        const taggedQuery = `-- APP:${appTag}\n${query}`;
 
         const start = new StartQueryExecutionCommand({
             QueryString: taggedQuery,

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from '@/lib/athena';
+import { runQuery, ATHENA_DATABASE, ATHENA_VIEW, getAthenaView, getSchemaMap } from '@/lib/athena';
 import { getCleanMap } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
@@ -19,12 +19,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     const cachedData = getCached(cacheKey);
     if (cachedData) return NextResponse.json(cachedData);
 
-    const TARGET_VIEW: string = ATHENA_VIEW || 'VW_Ciclo';
-
-    const rawCols = await runQuery(`SELECT * FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" LIMIT 0`)
-      .then((res: ResultSet | undefined) => res?.ResultSetMetadata?.ColumnInfo?.map(c => c.Name).filter((n): n is string => !!n) || []);
+    const TARGET_VIEW: string = getAthenaView() || ATHENA_VIEW || 'VW_Ciclo';
+    const isCleanData = TARGET_VIEW === 'pac_clean_data';
+    const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
     
-    const map: Record<string, string> = getCleanMap(rawCols);
     const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
     const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
     const dateFilter = `AND try_cast(${map.dt_peso_saida} as timestamp) >= date_add('day', -${days}, date_add('hour', -4, now()))`;
@@ -59,7 +57,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${dateFilter}
       ),
       dedupped AS (
-          SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY gmo_id ORDER BY ts_ult DESC) as rn FROM raw_data) WHERE rn = 1
+          SELECT * FROM (SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY gmo_id ORDER BY ts_ult DESC) as rn`} FROM raw_data) WHERE rn = 1
       ),
       metrics AS (
         SELECT 
