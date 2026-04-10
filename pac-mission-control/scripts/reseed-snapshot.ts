@@ -33,10 +33,10 @@ async function reseedTable() {
                 ) as ts_ult
             FROM ${ATHENA_DATABASE}.vw_ciclo
             WHERE (
-                try_cast(peso_saida as timestamp) >= date_add('day', -7, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
-                try_cast(cheguei as timestamp) >= date_add('day', -7, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
-                try_cast(agendamento as timestamp) >= date_add('day', -7, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
-                try_cast(janela_agendamento as timestamp) >= date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
+                try_cast(peso_saida as timestamp) >= date_add('day', -90, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
+                try_cast(cheguei as timestamp) >= date_add('day', -90, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
+                try_cast(agendamento as timestamp) >= date_add('day', -90, current_timestamp AT TIME ZONE 'America/Sao_Paulo') OR
+                try_cast(janela_agendamento as timestamp) >= date_add('day', -30, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
             )
         ),
         dedupped AS (

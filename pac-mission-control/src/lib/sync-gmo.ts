@@ -33,8 +33,11 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
         // Incremental: Get last record from SQLite
         const lastTs = getLastSyncTimestamp(terminal);
         if (lastTs) {
-            startTime = lastTs;
-            partitionFilter = getPartitionFilters(new Date(lastTs));
+            // Lookback de 2 dias para capturar registros late-arriving (ex: processados em D+1)
+            const lastDate = new Date(lastTs);
+            lastDate.setDate(lastDate.getDate() - 2);
+            startTime = lastDate.toISOString().replace('T', ' ').substring(0, 19);
+            partitionFilter = getPartitionFilters(lastDate);
         } else {
             // Default to start of current year if no history
             const startOfYear = `${new Date().getFullYear()}-01-01 00:00:00`;
@@ -44,9 +47,8 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
     }
 
     // Query for GMOs that finished after startTime
-    const year = new Date(startTime).getFullYear();
     const query = `
-        ${COMMON_CTES(map, terminal, '', year)}
+        ${COMMON_CTES(map, terminal, partitionFilter)}
         SELECT 
             gmo_id,
             terminal,
@@ -55,10 +57,20 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
             cliente,
             dt_emissao as dt_inicio,
             peso_saida as dt_peso_saida,
-            ciclo_total_h
+            ciclo_total_h,
+            aguardando_agendamento_h as fila_h,
+            tempo_viagem_h as viagem_h,
+            tempo_interno_h as interno_h,
+            dt_chegada,
+            cheguei,
+            dt_chamada,
+            area_verde_cheguei_h as area_verde_h,
+            dt_agendamento,
+            janela_agendamento
         FROM calc
-        WHERE peso_saida >= timestamp '${startTime}'
-          AND peso_saida IS NOT NULL
+        WHERE (peso_saida >= timestamp '${startTime}' OR peso_saida IS NULL)
+          AND dt_emissao >= date_add('day', -10, current_date)
+          AND (ciclo_total_h >= 1.0 OR ciclo_total_h IS NULL)
     `;
 
     console.log(`[Sync] [${terminal}] Buscando GMOs finalizados desde ${startTime}...`);
@@ -80,7 +92,16 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
             cliente: data[4]?.VarCharValue,
             dt_inicio: data[5]?.VarCharValue,
             dt_peso_saida: data[6]?.VarCharValue,
-            ciclo_total_h: parseFloat(data[7]?.VarCharValue || '0')
+            ciclo_total_h: parseFloat(data[7]?.VarCharValue || '0'),
+            fila_h: parseFloat(data[8]?.VarCharValue || '0'),
+            viagem_h: parseFloat(data[9]?.VarCharValue || '0'),
+            interno_h: parseFloat(data[10]?.VarCharValue || '0'),
+            dt_chegada: data[11]?.VarCharValue,
+            dt_cheguei: data[12]?.VarCharValue,
+            dt_chamada: data[13]?.VarCharValue,
+            area_verde_h: parseFloat(data[14]?.VarCharValue || '0'),
+            dt_agendamento: data[15]?.VarCharValue,
+            janela_agendamento: data[16]?.VarCharValue
         };
     });
 

@@ -4,7 +4,7 @@ import { COMMON_CTES } from '@/lib/athena-sql';
 import { getCached, setCached } from '@/lib/cache';
 import { applyPracaFilter } from '@/lib/pracas';
 import { ResultSet } from '@aws-sdk/client-athena';
-import { getHistoryStats } from '@/lib/db';
+import { getHistoryStats, getAllTargetsFor, getTargetFor } from '@/lib/db';
 import { syncFinishedGMOs } from '@/lib/sync-gmo';
 import { getClientAthenaFilter } from '@/lib/client-filter';
 
@@ -38,7 +38,18 @@ export async function GET(request: Request): Promise<NextResponse> {
         if (cachedData) return NextResponse.json(cachedData);
 
         const map: Record<string, string> = await getSchemaMap();
-        const META_H: number = 46.5333; // 46h32m
+        
+        // 0. DINAMIC META LOGIC
+        const allTargets = getAllTargetsFor(terminal);
+        const specificMeta = praca ? getTargetFor(terminal, praca) : null;
+        const GLOBAL_META = 46.5333;
+        
+        // SQL Snippet for dynamic meta comparison
+        const META_SQL = allTargets.length > 0
+            ? `(CASE ${allTargets.map(t => `WHEN calc.origem = '${t.origem.replace(/'/g, "''")}' THEN ${t.meta_h}`).join(' ')} ELSE ${GLOBAL_META} END)`
+            : `${GLOBAL_META}`;
+        
+        const DISPLAY_META = specificMeta || GLOBAL_META;
 
         const now: Date = new Date();
         const brt = getBRTComponents(now);
@@ -81,18 +92,19 @@ export async function GET(request: Request): Promise<NextResponse> {
                     ${buckets.map(b => `
                     count(distinct CASE WHEN peso_saida >= timestamp '${b.start}' AND peso_saida <= timestamp '${b.end}' THEN gmo_id END) as h${b.i}_vol,
                     avg(CASE WHEN peso_saida >= timestamp '${b.start}' AND peso_saida <= timestamp '${b.end}' THEN ciclo_total_h END) as h${b.i}_avg,
-                    count(distinct CASE WHEN peso_saida >= timestamp '${b.start}' AND peso_saida <= timestamp '${b.end}' AND ciclo_total_h > ${META_H} THEN gmo_id END) as h${b.i}_above
+                    count(distinct CASE WHEN peso_saida >= timestamp '${b.start}' AND peso_saida <= timestamp '${b.end}' AND ciclo_total_h > ${META_SQL} THEN gmo_id END) as h${b.i}_above
                     `).join(',\n')},
                     count(distinct gmo_id) as d_vol,
                     avg(ciclo_total_h) as d_avg,
-                    count(distinct CASE WHEN ciclo_total_h > ${META_H} THEN gmo_id END) as d_above,
+                    count(distinct CASE WHEN ciclo_total_h > ${META_SQL} THEN gmo_id END) as d_above,
                     max(peso_saida) as last_update
                  FROM calc
                  ${pracaFilter.join}
                  WHERE peso_saida >= timestamp '${startDay}' 
-                   AND peso_saida <= timestamp '${endDay}'
-                   ${produtoFilter}
-                   ${clienteFilter}
+                    AND peso_saida <= timestamp '${endDay}'
+                    AND ciclo_total_h >= 1.0
+                    ${produtoFilter}
+                    ${clienteFilter}
             )
             SELECT * FROM today_stats
         `;
@@ -131,7 +143,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const mkBucket = (label: string, avg: number, vol: number, above: number, isFallback = false) => ({
             label, avg_h: avg, volume: vol, acima_meta_count: above,
             acima_meta_pct: vol > 0 ? (above / vol * 100) : 0,
-            delta_meta_h: vol > 0 ? (avg - META_H) : 0,
+            delta_meta_h: vol > 0 ? (avg - DISPLAY_META) : 0,
             is_fallback: isFallback
         });
 

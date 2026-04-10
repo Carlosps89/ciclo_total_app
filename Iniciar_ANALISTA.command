@@ -1,29 +1,36 @@
 #!/bin/bash
-# Script para iniciar o Analista CCO (Bot Telegram) no Mac
-# Ciclo Total App
+# Carrega o ambiente do usuário para encontrar node/npx/npm
+[ -s "$HOME/.nvm/nvm.sh" ] && \. "$HOME/.nvm/nvm.sh"
+[ -s "$HOME/.bash_profile" ] && source "$HOME/.bash_profile"
+[ -s "$HOME/.zshrc" ] && source "$HOME/.zshrc"
 
-cd "/Users/carlospereira/ciclo_total_app/pac-mission-control"
+cd "$(dirname "$0")/pac-mission-control"
+clear
+echo "=========================================================="
+echo "   🤖 PAC Insight - Bot Analista (v3.0)                 "
+echo "=========================================================="
+echo "Este terminal deve ficar aberto para o robô funcionar."
+echo "Ele está conectado aos dados otimizados do Dashboard."
+echo ""
 
-# Carregar o NVM (para garantir que o node/npm funcionem)
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-echo "--- Iniciando PAC Insight (Bot Telegram) ---"
-
-# Tentar instalar o PM2 se não existir
-if ! command -v pm2 &> /dev/null
+# Verifica se o npx está disponível agora
+if ! command -v npx &> /dev/null
 then
-    echo "[INFO] Instalando PM2..."
-    npm install -g pm2
+    echo "❌ Erro: Não encontrei o comando 'npx' ou 'node'."
+    echo "Certifique-se de que o Node.js está instalado corretamente."
+    read -p "Pressione Enter para sair..."
+    exit 1
 fi
 
-# Iniciar o bot via PM2 usando o npx com tsx
-echo "[INFO] Iniciando processo no PM2..."
-pm2 start ecosystem.config.js --only pac-bot-agent
-
-echo "--------------------------------------------"
-echo "Status do Bot:"
-pm2 status pac-bot-agent
-echo "--------------------------------------------"
-echo "Pode fechar esta janela. O bot continuará rodando em segundo plano."
-read -p "Pressione ENTER para fechar..."
+while true
+do
+  echo "[$(date +%T)] 🚀 Iniciando PAC Insight..."
+  
+  # Inicia o bot worker diretamente para ver os logs em tempo real
+  npx tsx src/workers/tg-agent-worker.ts
+  
+  echo ""
+  echo "⚠️ O processo foi interrompido. Reiniciando em 5 segundos..."
+  echo "----------------------------------------------------------"
+  sleep 5
+done

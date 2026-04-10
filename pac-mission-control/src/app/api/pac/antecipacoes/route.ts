@@ -121,7 +121,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ),
       dedupped AS (
           SELECT * FROM (
-              SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
+              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
               FROM raw_data
           ) WHERE rn = 1
       ),
@@ -160,11 +160,11 @@ export async function GET(request: Request): Promise<NextResponse> {
       , agg_global AS (
         SELECT 
            count(distinct gmo_id) as total_arrivals_unique,
-           count(CASE WHEN window_day = 'D0' THEN 1 END) as total_d,
-           count(CASE WHEN window_day = 'D1' THEN 1 END) as total_d1,
-           count(CASE WHEN window_day = 'D2' THEN 1 END) as total_d2,
-           count(CASE WHEN is_early = 1 THEN 1 END) as total_early,
-           count(CASE WHEN peso_saida IS NOT NULL THEN 1 END) as total_finished_subset,
+           count(distinct CASE WHEN window_day = 'D0' THEN gmo_id END) as total_d,
+           count(distinct CASE WHEN window_day = 'D1' THEN gmo_id END) as total_d1,
+           count(distinct CASE WHEN window_day = 'D2' THEN gmo_id END) as total_d2,
+           count(distinct CASE WHEN is_early = 1 THEN gmo_id END) as total_early,
+           count(distinct CASE WHEN peso_saida IS NOT NULL THEN gmo_id END) as total_finished_subset,
            avg(CASE WHEN is_early = 1 THEN hours_early END) as avg_early_h,
            max(CASE WHEN is_early = 1 THEN hours_early END) as max_early_h
         FROM universe

@@ -31,7 +31,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         const pracaMapper = getPracaSqlMapper(terminal, 'c.origem');
 
         const query = `
-            ${COMMON_CTES(map, terminal)}
+            ${COMMON_CTES(map, terminal, '', { range: 'month' })}
             , monthly_stats as (
                 SELECT 
                     avg(c.ciclo_total_h) as avg_h,

@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   try {
       const map = await getSchemaMap();
       const sql = `
-        ${COMMON_CTES(map, terminal)}
+        ${COMMON_CTES(map, terminal, '', { start: targetDate, end: targetDate })}
         ${pracaFilterCalc.cte}
         , base AS (
             SELECT 

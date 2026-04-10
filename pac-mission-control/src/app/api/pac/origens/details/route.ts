@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
   try {
       const map = await getSchemaMap();
       const sql = `
-        ${COMMON_CTES(map, terminal)}
+        ${COMMON_CTES(map, terminal, '', { range: 'year' })}
         ${pracaFilterCalc.cte}
         , base_filtered AS (
             SELECT 
@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
 
       // 5. FETCH VEHICLES (Today)
       const vehiclesSql = `
-        ${COMMON_CTES(map, terminal)}
+        ${COMMON_CTES(map, terminal, '', { range: 'year' })}
         ${pracaFilterCalc.cte}
         SELECT 
             gmo_id,

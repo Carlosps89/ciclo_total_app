@@ -57,7 +57,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             ${dateFilter}
       ),
       dedupped AS (
-          SELECT * FROM (SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY gmo_id ORDER BY ts_ult DESC) as rn`} FROM raw_data) WHERE rn = 1
+          SELECT * FROM (SELECT *, row_number() OVER (PARTITION BY gmo_id ORDER BY ts_ult DESC) as rn FROM raw_data) WHERE rn = 1
       ),
       metrics AS (
         SELECT 

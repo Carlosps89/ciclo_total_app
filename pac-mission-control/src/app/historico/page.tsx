@@ -47,7 +47,7 @@ function HistoricalContent() {
 
   useEffect(() => {
     // Correct way to initialize dates to avoid hydration mismatch
-    if (!startDate || !endDate) {
+    if (!mounted) {
       const now = new Date();
       const endStr = now.toISOString().split('T')[0];
       const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -55,9 +55,9 @@ function HistoricalContent() {
       
       if (!startDate) setStartDate(searchParams.get('startDate') || startStr);
       if (!endDate) setEndDate(searchParams.get('endDate') || endStr);
+      setMounted(true);
     }
-    setMounted(true);
-  }, [searchParams, startDate, endDate]);
+  }, [mounted, searchParams, startDate, endDate]);
 
   const handleExport = async () => {
     setExportLoading(true);

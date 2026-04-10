@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         const produtoFilter = produto ? `AND produto = '${produto}'` : '';
         
         const sql = `
-            ${COMMON_CTES(map, terminal)}
+            ${COMMON_CTES(map, terminal, '', { start: startDate, end: endDate })}
             ${pracaFilterEarly.cte}
             SELECT 
                 COUNT(DISTINCT gmo_id) as volume_total,

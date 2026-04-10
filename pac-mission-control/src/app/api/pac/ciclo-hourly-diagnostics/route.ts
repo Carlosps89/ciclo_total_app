@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
         } else {
             // Apply Partition Pruning directly in the base table scan inside COMMON_CTES
             const hourlySql = `
-                ${COMMON_CTES(map, terminal, partitionFilter)}
+                ${COMMON_CTES(map, terminal, partitionFilter, { start: targetDate, end: targetDate })}
                 ${pracaFilterEarly.cte}
                 , base AS (
                     SELECT hour(peso_saida) as h, ciclo_total_h, gmo_id

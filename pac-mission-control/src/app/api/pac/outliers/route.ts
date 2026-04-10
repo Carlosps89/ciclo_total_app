@@ -75,7 +75,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           SELECT * FROM (
             SELECT 
               *,
-              ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
+              row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
             FROM raw_data
           ) WHERE rn = 1
       ),

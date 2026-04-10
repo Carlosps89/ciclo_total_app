@@ -5,9 +5,10 @@ import { getCached, setCached } from '@/lib/cache';
 import { getPracaSqlMapper } from '@/lib/pracas';
 import { ResultSet, ColumnInfo, Row } from '@aws-sdk/client-athena';
 import { getClientAthenaFilter } from '@/lib/client-filter';
+import { getAllTargetsFor } from '@/lib/db';
 
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-const META_H = 46.5333; // 46h32m
+const GLOBAL_META = 46.5333;
 
 // Usando getSchemaMap global de @/lib/athena
 
@@ -37,20 +38,33 @@ export async function GET(request: Request): Promise<NextResponse> {
         const clienteFilter = getClientAthenaFilter(terminal, cliente, 'c.cliente');
         const pracaMapper = getPracaSqlMapper(terminal, 'c.origem');
 
+        // Target Logic
+        const allTargets = getAllTargetsFor(terminal);
+        const META_SQL = allTargets.length > 0
+            ? `(CASE ${allTargets.map(t => `WHEN c.origem = '${t.origem.replace(/'/g, "''")}' THEN ${t.meta_h}`).join(' ')} ELSE ${GLOBAL_META} END)`
+            : `${GLOBAL_META}`;
+
         const query = `
             ${COMMON_CTES(map, terminal)}
+            , with_praca as (
+                SELECT 
+                    c.*,
+                    ${pracaMapper} as praca_nome
+                FROM calc c
+            )
             , grouped_stats as (
                 SELECT 
-                    ${pracaMapper} as praca_nome,
-                    avg(c.ciclo_total_h) as avg_h,
-                    count(distinct c.gmo_id) as volume,
-                    count(distinct CASE WHEN c.ciclo_total_h > ${META_H} THEN gmo_id END) as count_above
-                FROM calc c
-                WHERE c.peso_saida >= timestamp '${startDay}' 
-                  AND c.peso_saida <= timestamp '${endDay}'
+                    praca_nome,
+                    avg(ciclo_total_h) as avg_h,
+                    count(distinct gmo_id) as volume,
+                    count(distinct CASE WHEN ciclo_total_h > ${META_SQL.replace(/c\.origem/g, 'praca_nome')} THEN gmo_id END) as count_above,
+                    ${META_SQL.replace(/c\.origem/g, 'praca_nome')} as target_h
+                FROM with_praca
+                WHERE peso_saida >= timestamp '${startDay}' 
+                  AND peso_saida <= timestamp '${endDay}'
                   ${produtoFilter}
                   ${clienteFilter}
-                GROUP BY 1
+                GROUP BY 1, 5
             )
             SELECT * FROM grouped_stats
             ORDER BY volume DESC
@@ -65,13 +79,15 @@ export async function GET(request: Request): Promise<NextResponse> {
             const avg_h = parseFloat(data[1]?.VarCharValue || '0');
             const volume = parseInt(data[2]?.VarCharValue || '0');
             const count_above = parseInt(data[3]?.VarCharValue || '0');
+            const target_h = parseFloat(data[4]?.VarCharValue || GLOBAL_META.toString());
 
             return {
                 praca,
                 avg_h,
                 volume,
+                target_h,
                 acima_meta_pct: volume > 0 ? (count_above / volume) * 100 : 0,
-                status: avg_h <= META_H ? 'green' : avg_h <= META_H * 1.15 ? 'yellow' : 'red'
+                status: avg_h <= target_h ? 'green' : avg_h <= target_h * 1.15 ? 'yellow' : 'red'
             };
         });
 

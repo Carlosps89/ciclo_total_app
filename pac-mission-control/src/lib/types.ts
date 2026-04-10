@@ -140,6 +140,7 @@ export interface PracaStatsItem {
     praca: string;
     avg_h: number;
     volume: number;
+    target_h: number;
     acima_meta_pct: number;
     status: 'green' | 'yellow' | 'red';
 }

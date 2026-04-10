@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
      // 1. Get Top N Origins by Volume
      const topSql = `
-        ${COMMON_CTES(map, terminal)}
+        ${COMMON_CTES(map, terminal, '', dateResult ? { start: dateResult, end: dateResult } : { range: 'today' })}
         ${pracaFilterCalc.cte}
         SELECT 
             origem, 
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
 
      // 2. Get Matrix Data (Origin x Hour)
      const matrixSql = `
-        ${COMMON_CTES(map, terminal)}
+        ${COMMON_CTES(map, terminal, '', dateResult ? { start: dateResult, end: dateResult } : { range: 'today' })}
         ${pracaFilterCalc.cte}
         SELECT 
             origem,

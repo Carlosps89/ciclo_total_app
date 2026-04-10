@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
             municipiosFilter = `AND calc.origem IN (${cities})`;
         }
         const sql = `
-            ${COMMON_CTES(map, terminal)}
+            ${COMMON_CTES(map, terminal, '', { start: startDate, end: endDate })}
             ${pracaFilter.cte}
             
             , period_data AS (

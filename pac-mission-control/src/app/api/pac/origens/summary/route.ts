@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       }
 
       const sql = `
-        ${COMMON_CTES(map, terminal)}
+        ${COMMON_CTES(map, terminal, '', { range })}
         ${pracaFilterCalc.cte}
         SELECT 
             origem,

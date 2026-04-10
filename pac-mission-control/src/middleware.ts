@@ -5,6 +5,7 @@ import { jwtVerify } from 'jose';
 // Secret key deve ser idêntica à do lib/auth.ts
 const SECRET_KEY = process.env.JWT_SECRET || 'rumo-pac-mission-control-secret-key-2026';
 const key = new TextEncoder().encode(SECRET_KEY);
+const BOT_ACCESS_TOKEN = process.env.BOT_ACCESS_TOKEN || 'rumo-pac-bot-secret-key-2026';
 
 async function decrypt(input: string): Promise<any> {
   const { payload } = await jwtVerify(input, key, {
@@ -28,6 +29,12 @@ export async function middleware(request: NextRequest) {
   // 2. Rotas de Autenticação (Públicas mas controladas)
   const isLoginPage = pathname === '/login';
   const isLoginApi = pathname === '/api/login';
+
+  // 2.5 Bypass para o Robô (Screenshots)
+  const botToken = request.headers.get('x-pac-bot-token');
+  if (botToken === BOT_ACCESS_TOKEN) {
+    return NextResponse.next();
+  }
 
   // 3. Obter Sessão
   const sessionToken = request.cookies.get('session')?.value;

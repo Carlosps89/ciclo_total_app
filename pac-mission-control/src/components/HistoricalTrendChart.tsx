@@ -41,6 +41,11 @@ export function HistoricalTrendChart({
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
+    if (!startDate || !endDate) {
+        setLoading(false);
+        setData([]);
+        return;
+    }
     setLoading(true);
     try {
         const pParam = produto ? `&produto=${encodeURIComponent(produto)}` : '';

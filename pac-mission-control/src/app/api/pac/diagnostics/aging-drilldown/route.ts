@@ -40,7 +40,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             try_cast(${map.dt_emissao} as timestamp) as dt_em,
             try_cast(${map.dt_agendamento} as timestamp) as dt_ag,
             try_cast(${map.janela_agendamento} as timestamp) as dt_ja,
-            ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY ${map.id} ORDER BY coalesce(try_cast(${map.dt_peso_saida} as timestamp), try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_chamada} as timestamp), try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) DESC) as rn`}
+            row_number() OVER (PARTITION BY ${map.id} ORDER BY coalesce(try_cast(${map.dt_peso_saida} as timestamp), try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_chamada} as timestamp), try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) DESC) as rn
         FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
         WHERE (base.${map.terminal} = '${terminal}' OR (base.${map.terminal} IS NULL AND '${terminal}' = 'TRO'))
           ${extraFilters}

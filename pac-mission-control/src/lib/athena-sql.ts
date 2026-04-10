@@ -1,7 +1,21 @@
 import { mapColumns, ATHENA_DATABASE, ATHENA_VIEW } from './athena';
 
-export const COMMON_CTES = (map: Record<string, string>, terminal: string, extraFilters: string = ''): string => {
-  const isCleanData = ATHENA_VIEW === 'pac_clean_data';
+export interface DateRangeOptions {
+  start?: string | null;
+  end?: string | null;
+  range?: string | null;
+}
+
+export const COMMON_CTES = (
+  map: Record<string, string>, 
+  terminal: string, 
+  extraFilters: string = '',
+  dateOptions?: DateRangeOptions | null
+): string => {
+  // Determine if this is a historical query that falls outside the short cache or specifically requests range/dateOption
+  const isHistoricalQuery = dateOptions && (dateOptions.start || dateOptions.range === 'month' || dateOptions.range === 'year' || dateOptions.range === 'week');
+  const targetView = (ATHENA_VIEW === 'pac_clean_data' && isHistoricalQuery) ? 'vw_ciclo' : ATHENA_VIEW;
+  const isCleanData = targetView === 'pac_clean_data';
   
   // Decide what to use for ts_ult (controlling column for deduplication)
   const tsUltColumn = isCleanData ? (map.ts_ult || 'ts_ult') : `greatest(
@@ -12,6 +26,45 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
         coalesce(try_cast(${map.dt_agendamento} as timestamp), timestamp '1900-01-01 00:00:00'),
         coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
       )`;
+
+  let dtFilter = '';
+  if (isCleanData) {
+      if (dateOptions?.start && dateOptions?.end) {
+          dtFilter = `AND (dt = 'ACTIVE' OR (
+              dt >= format_datetime(date_add('day', -10, date '${dateOptions.start}'), 'yyyy-MM-dd')
+              AND dt <= format_datetime(date_add('day', 2, date '${dateOptions.end}'), 'yyyy-MM-dd')
+          ))`;
+      } else if (dateOptions?.range) {
+          if (dateOptions.range === 'month') {
+              dtFilter = `AND (dt = 'ACTIVE' OR dt >= format_datetime(date_add('day', -10, date_trunc('month', current_date)), 'yyyy-MM-dd'))`;
+          } else if (dateOptions.range === 'year') {
+              dtFilter = `AND (dt = 'ACTIVE' OR dt >= format_datetime(date_add('day', -10, date_trunc('year', current_date)), 'yyyy-MM-dd'))`;
+          } else if (dateOptions.range === 'week') {
+              dtFilter = `AND (dt = 'ACTIVE' OR dt >= format_datetime(date_add('day', -10, current_date), 'yyyy-MM-dd'))`;
+          } else {
+              // today or fallback
+              dtFilter = `AND dt IN ('ACTIVE', 
+                  format_datetime(date_add('day', -1, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+                  format_datetime(date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+                  format_datetime(date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+                  format_datetime(date_add('day', -4, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+                  format_datetime(date_add('day', -5, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+                  format_datetime(date_add('day', -6, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+                  format_datetime(current_timestamp AT TIME ZONE 'America/Sao_Paulo', 'yyyy-MM-dd')
+              )`;
+          }
+      } else {
+          dtFilter = `AND dt IN ('ACTIVE', 
+              format_datetime(date_add('day', -1, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -4, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -5, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+              format_datetime(date_add('day', -6, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
+              format_datetime(current_timestamp AT TIME ZONE 'America/Sao_Paulo', 'yyyy-MM-dd')
+          )`;
+      }
+  }
 
   // Always deduplicate across partitions to handle transition from 'ACTIVE' to daily dates
   const deduppedLogic = `
@@ -45,17 +98,10 @@ export const COMMON_CTES = (map: Record<string, string>, terminal: string, extra
       ${map.cliente} as _col_cliente,
       ano, mes, dia,
       ${tsUltColumn} as ts_ult
-    FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}"
+    FROM "${ATHENA_DATABASE}"."${targetView}"
     WHERE ${map.terminal} = '${terminal}'
-    ${isCleanData ? `AND dt IN ('ACTIVE', 
-        format_datetime(date_add('day', -1, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
-        format_datetime(date_add('day', -2, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
-        format_datetime(date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
-        format_datetime(date_add('day', -4, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
-        format_datetime(date_add('day', -5, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
-        format_datetime(date_add('day', -6, current_timestamp AT TIME ZONE 'America/Sao_Paulo'), 'yyyy-MM-dd'),
-        format_datetime(current_timestamp AT TIME ZONE 'America/Sao_Paulo', 'yyyy-MM-dd')
-    )` : ''}
+      AND ${map.movimento} != 'CARGA'
+    ${dtFilter}
     ${extraFilters}
   ),
   dedupped AS (
@@ -120,6 +166,7 @@ export function getCleanMap(columns: string[]): Record<string, string> {
     dt_janela: find(['janela', 'window']) || 'janela_agendamento',
     placa: find(['placa', 'tracao']) || 'placa_tracao',
     janela_agendamento: find(['janela', 'window']) || 'janela_agendamento',
+    movimento: find(['movimento', 'operacao']) || 'movimento',
     evento: find(['evento', 'event', 'desc', 'ds_evento']) || 'evento',
     situacao: find(['situacao', 'status', 'ds_situacao']) || 'situacao',
     produto: find(['produto', 'mercadoria', 'material']) || 'produto',

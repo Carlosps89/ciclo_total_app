@@ -35,22 +35,21 @@ O **Ciclo Total** de um veículo não é apenas o tempo que ele gasta dentro do 
 As etapas do fluxo logístico são medidas pela diferença em horas decimais entre os carimbos. A função padrão no Athena é: 
 `date_diff('second', timestamp_inicial, timestamp_final) / 3600.0`
 
-* **Etapa 1: Aguardando Agendamento (Espera / Fila Externa):** 
-  `dt_agendamento` ATÉ `janela_agendamento`
-  *(Nota: Na visão do Drilldown, também pode ser `dt_agendamento` até `dt_janela` ou `dt_cheguei` dependendo se o veículo antecipou).*
+* **Etapa 1: Aguardando Agendamento (Fila):** 
+  `dt_emissao` ATÉ `dt_agendamento`
 * **Etapa 2: Tempo de Viagem (Trânsito Externo):** 
-  `dt_agendamento` ATÉ `dt_cheguei` (ou `dt_chamada`).
+  `dt_agendamento` ATÉ `dt_chegada`.
 * **Etapa 3: Ciclo Interno (Operação Terminal):** 
-  `dt_chegada` ATÉ `dt_peso_saida` (Se `peso_saida` for nulo, usa-se o `now()` corrente para veículos ainda operando).
+  `dt_chegada` ATÉ `dt_peso_saida`.
 
 ### 2.2 Cálculo do Ciclo Total Agregado (Impacto Total)
 O Ciclo Total real (`ciclo_h` ou `valor_h`) que deve ser exibido nos modais de detalhe e nas médias das barras do Histograma **DEVE OBRIGATORIAMENTE SER A SOMA DAS ETAPAS ACIMA**, representando a jornada de ponta a ponta:
 
 `True Cycle Total = (Tempo Aguardando Agendamento) + (Tempo de Viagem) + (Ciclo Interno)`
 
-No SQL, a fórmula crua do `ciclo_h` de ponta a ponta é calculada como:
-`date_diff('second', dt_agendamento, coalesce(peso_saida, timestamp 'agora')) / 3600.0`
-*Erro Comum a evitar:* Não calcule o Ciclo Total apenas de `dt_cheguei` até `dt_peso_saida`, pois isso ignora o tempo de emissão/agendamento.
+No SQL, a fórmula crua do `ciclo_total_h` de ponta a ponta é calculada como:
+`date_diff('second', dt_emissao, coalesce(peso_saida, current_timestamp)) / 3600.0`
+*Regra de Ouro:* O ciclo começa na **Emissão** da NF e termina no **Peso de Saída**.
 
 ---
 

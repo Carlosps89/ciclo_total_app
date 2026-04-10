@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
-import { Menu, X, Map, CalendarDays, Settings, LogOut, Shield, User, Activity, TrendingUp, Calendar, ChevronRight, Download, Loader2, Gauge, AlertCircle, Clock, CalendarClock, CheckCircle, Search } from 'lucide-react';
+import { Menu, X, Map, CalendarDays, Settings, LogOut, Shield, User, Activity, TrendingUp, Calendar, ChevronRight, Download, Loader2, Gauge, AlertCircle, Clock, CalendarClock, CheckCircle, Search, Target } from 'lucide-react';
 import { PerformanceCockpitDrawer } from '@/components/PerformanceCockpitDrawer';
 import { CicloTotalHourlyChart } from '@/components/CicloTotalHourlyChart';
 import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
@@ -409,14 +409,26 @@ function DashboardContent() {
                             <span className="font-bold">Diagnóstico de Ciclo</span>
                         </Link>
 
-                        <Link 
-                            href="/admin/users" 
-                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
-                            onClick={() => setIsMenuOpen(false)}
-                        >
-                            <Settings className="w-5 h-5 text-purple-500" />
-                            <span className="font-bold">Gestão de Usuários</span>
-                        </Link>
+                        {session?.role === 'ADM' && (
+                          <>
+                            <Link 
+                                href="/admin/targets" 
+                                className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                <Target className="w-5 h-5 text-indigo-500" />
+                                <span className="font-bold">Gestão de Metas</span>
+                            </Link>
+                            <Link 
+                                href="/admin/users" 
+                                className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                <Settings className="w-5 h-5 text-purple-500" />
+                                <span className="font-bold">Gestão de Usuários</span>
+                            </Link>
+                          </>
+                        )}
                     </div>
 
                     <div className="p-4 border-t border-gray-800">
@@ -747,14 +759,24 @@ function DashboardContent() {
                       </Link>
 
                       {session?.role === 'ADM' && (
-                        <Link 
-                            href="/admin/users" 
-                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
-                            onClick={() => setIsMenuOpen(false)}
-                        >
-                            <Settings className="w-5 h-5 text-purple-500" />
-                            <span className="font-bold">Gestão de Usuários</span>
-                        </Link>
+                        <>
+                          <Link 
+                              href="/admin/targets" 
+                              className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                              onClick={() => setIsMenuOpen(false)}
+                          >
+                              <Target className="w-5 h-5 text-indigo-500" />
+                              <span className="font-bold">Gestão de Metas</span>
+                          </Link>
+                          <Link 
+                              href="/admin/users" 
+                              className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                              onClick={() => setIsMenuOpen(false)}
+                          >
+                              <Settings className="w-5 h-5 text-purple-500" />
+                              <span className="font-bold">Gestão de Usuários</span>
+                          </Link>
+                        </>
                       )}
                   </div>
 
@@ -1271,9 +1293,15 @@ function DashboardContent() {
                               <span className="text-xl font-black text-white font-sans">{fmtH(p.avg_h)}</span>
                               <span className="text-[10px] text-white/50 font-bold">h</span>
                            </div>
-                           <div className="flex flex-col items-end">
-                              <span className="text-[9px] text-white/40 font-bold uppercase leading-none">Vol</span>
-                              <span className="text-xs font-bold text-white font-sans">{p.volume}</span>
+                           <div className="flex flex-col items-end gap-2 px-1">
+                              <div className="flex items-center gap-1.5 opacity-80 group-hover:opacity-100 transition-all">
+                                 <Target size={10} className="text-indigo-400" />
+                                 <span className="text-[10px] font-black text-white/70 uppercase">Meta {fmtH(p.target_h)}h</span>
+                              </div>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[9px] text-white/40 font-bold uppercase leading-none">Vol</span>
+                                <span className="text-xs font-bold text-white font-sans">{p.volume}</span>
+                              </div>
                            </div>
                         </div>
                       </div>

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { runQuery, ATHENA_DATABASE, ATHENA_VIEW } from "@/lib/athena";
-import { getCleanMap } from "@/lib/athena-sql";
+import { getCleanMap, COMMON_CTES } from "@/lib/athena-sql";
 import { getCached, setCached } from "@/lib/cache";
 import { applyPracaFilter } from "@/lib/pracas";
 import { VehicleItem } from "@/lib/types";
@@ -34,54 +34,37 @@ export async function GET(req: NextRequest) {
 
     try {
         const map = await getSchemaMap();
-        const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
+        const pracaFilterCalc = applyPracaFilter(terminal, praca, 'calc.origem');
         
         const sql = `
-            ${pracaFilter.cte}
-            ${pracaFilter.cte ? ',' : 'WITH'} raw_data AS (
-                SELECT 
-                    ${map.id} as gmo_id,
-                    ${map.terminal} as terminal,
-                    ${map.origem} as origem,
-                    ${map.produto} as produto,
-                    ${map.placa} as placa_tracao,
-                    COALESCE(${map.cliente}, 'Desconhecido') as cliente,
-                    try_cast(${map.dt_peso_saida} as timestamp) as peso_saida,
-                    
-                    try_cast(${map.dt_cheguei} as timestamp) as dt_cheguei,
-                    try_cast(${map.dt_chamada} as timestamp) as dt_chamada,
-                    try_cast(${map.dt_chegada} as timestamp) as dt_chegada,
-                    try_cast(${map.dt_agendamento} as timestamp) as dt_agendamento,
-                    try_cast(${map.dt_emissao} as timestamp) as dt_emissao,
-                    try_cast(${map.dt_janela} as timestamp) as dt_janela,
-                    try_cast(${map.dt_peso_saida} as timestamp) as dt_peso_saida,
+            ${COMMON_CTES(map, terminal, '', { start: startDate, end: endDate })}
+            ${pracaFilterCalc.cte}
+            SELECT 
+                gmo_id,
+                terminal,
+                origem,
+                produto,
+                placa as placa_tracao,
+                COALESCE(cliente, 'Desconhecido') as cliente,
+                peso_saida,
+                
+                try_cast(${map.dt_cheguei} as timestamp) as dt_cheguei,
+                try_cast(${map.dt_chamada} as timestamp) as dt_chamada,
+                try_cast(${map.dt_chegada} as timestamp) as dt_chegada,
+                try_cast(${map.dt_agendamento} as timestamp) as dt_agendamento,
+                try_cast(${map.dt_emissao} as timestamp) as dt_emissao,
+                try_cast(${map.dt_janela} as timestamp) as dt_janela,
+                peso_saida as dt_peso_saida,
 
-                    date_diff('second', try_cast(${map.dt_emissao} as timestamp), try_cast(${map.dt_peso_saida} as timestamp)) / 3600.0 as ciclo_total_h,
-                    date_diff('second', try_cast(${map.dt_cheguei} as timestamp), try_cast(${map.dt_chamada} as timestamp)) / 3600.0 as tempo_area_verde_h,
-                    date_diff('second', try_cast(${map.dt_chegada} as timestamp), try_cast(${map.dt_peso_saida} as timestamp)) / 3600.0 as ciclo_interno_h,
-                    date_diff('second', try_cast(${map.dt_agendamento} as timestamp), try_cast(${map.dt_chegada} as timestamp)) / 3600.0 as tempo_viagem_h,
-                    date_diff('second', try_cast(${map.dt_emissao} as timestamp), try_cast(${map.dt_agendamento} as timestamp)) / 3600.0 as aguardando_agendamento_h,
-                    
-                    greatest(
-                        coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
-                        coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
-                        coalesce(try_cast(${map.dt_chamada} as timestamp), timestamp '1900-01-01 00:00:00'),
-                        coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00'),
-                        coalesce(try_cast(${map.dt_agendamento} as timestamp), timestamp '1900-01-01 00:00:00'),
-                        coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
-                    ) as ts_ult
-                FROM "${ATHENA_DATABASE}"."${ATHENA_VIEW}" base
-                ${pracaFilter.join}
-                WHERE base.${map.terminal} = '${terminal}'
-            ),
-            dedupped AS (
-                SELECT * FROM (
-                    SELECT *, row_number() OVER (PARTITION BY gmo_id ORDER BY ts_ult DESC) as rn
-                    FROM raw_data
-                ) WHERE rn = 1
-            )
-            SELECT * FROM dedupped
-            WHERE peso_saida >= from_iso8601_timestamp('${startDate}T00:00:00-03:00')
+                ciclo_total_h,
+                tempo_area_verde_h,
+                ciclo_interno_h,
+                tempo_viagem_h,
+                aguardando_agendamento_h
+            FROM calc
+            ${pracaFilterCalc.join}
+            WHERE terminal = '${terminal}'
+              AND peso_saida >= from_iso8601_timestamp('${startDate}T00:00:00-03:00')
               AND peso_saida <= from_iso8601_timestamp('${endDate}T23:59:59-03:00')
               AND ciclo_total_h IS NOT NULL
               ${produto ? `AND produto = '${produto}'` : ''}

@@ -60,6 +60,11 @@ export function HistoricalHeatmap({
   }, []);
 
   const fetchData = useCallback(async () => {
+    if (!startDate || !endDate) {
+        setLoading(false);
+        setDays([]);
+        return;
+    }
     setLoading(true);
     try {
         const prodParam = produto ? `&produto=${encodeURIComponent(produto)}` : '';

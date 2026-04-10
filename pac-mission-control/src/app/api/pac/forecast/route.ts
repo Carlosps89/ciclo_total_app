@@ -72,7 +72,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       ),
       dedupped AS (
           SELECT * FROM (
-              SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn`}
+              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
               FROM raw_data
           ) WHERE rn = 1
       ),
@@ -177,14 +177,14 @@ export async function GET(request: Request): Promise<NextResponse> {
         ),
         dedup AS (
           SELECT * FROM (
-            SELECT *, ${isCleanData ? '1 as rn' : `row_number() OVER (PARTITION BY id ORDER BY greatest(
+            SELECT *, row_number() OVER (PARTITION BY id ORDER BY greatest(
               coalesce(try_cast(ps as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(ag as timestamp), timestamp '1900-01-01 00:00:00'),
               coalesce(try_cast(em as timestamp), timestamp '1900-01-01 00:00:00')
-            ) DESC) as rn`} FROM raw_data
+            ) DESC) as rn FROM raw_data
           ) WHERE rn = 1
         ),
         canceled_ids AS (
