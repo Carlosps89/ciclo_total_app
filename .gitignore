@@ -79,3 +79,5 @@ pac-mission-control/small_payload.json
 *.csv
 *.xlsx
 data*.xlsx
+pac-mission-control/scripts/aws-auth.log
+*.log
