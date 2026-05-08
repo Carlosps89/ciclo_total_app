@@ -53,3 +53,29 @@ snapshots/
 # OS
 Thumbs.db
 ehthumbs.db
+
+# Local AI/tools
+.claude/
+CLAUDE.md
+Ollama.app/
+Ollama-darwin.zip
+google.antigravity-dev-containers
+
+# Tunnels/downloads
+ngrok.zip
+ngrok-v3-stable-darwin-arm64.zip
+pac-mission-control/ngrok.zip
+pac-mission-control/ngrok-v3-stable-darwin-arm64.zip
+
+# Local configs/secrets
+litellm_config.yaml
+
+# Temporary/debug payloads
+pac-mission-control/scratch/
+pac-mission-control/large_payload.json
+pac-mission-control/small_payload.json
+
+# Local audit/export files
+*.csv
+*.xlsx
+data*.xlsx
