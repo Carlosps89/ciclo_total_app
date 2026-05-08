@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, Download, Scale, Scissors, AlertTriangle, ChevronDown, X } from 'lucide-react';
+import { Calendar, Download, Scale, Scissors, AlertTriangle, ChevronDown, X, Menu, ChevronLeft } from 'lucide-react';
 import { Bar } from 'react-chartjs-2';
 
 export interface OutlierData {
@@ -47,24 +47,34 @@ interface Props {
   setIqr?: (v: number) => void;
   limits?: { emissao: number, agendamento: number, viagem: number, verde: number, interno: number };
   setLimits?: (v: { emissao: number, agendamento: number, viagem: number, verde: number, interno: number }) => void;
+  onMenuClick?: () => void;
 }
 
-export function GlobalOutlierHeader({ startDate, endDate, terminal, setStartDate, setEndDate, onExport, exporting, iqr, setIqr }: Props) {
+export function GlobalOutlierHeader({ startDate, endDate, terminal, setStartDate, setEndDate, onExport, exporting, iqr, setIqr, onMenuClick }: Props) {
   return (
-    <div className="bg-[#020a14]/90 backdrop-blur-xl border border-white/5 rounded-[32px] p-6 lg:p-8 flex flex-col md:flex-row justify-between items-center shadow-2xl">
-      <div>
-        <h1 className="text-3xl font-black bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent flex items-center gap-4 tracking-tighter">
+    <div className="bg-[#020a14]/90 backdrop-blur-xl border border-white/5 rounded-[32px] p-6 lg:p-8 flex flex-col xl:flex-row justify-between items-start xl:items-center shadow-2xl gap-6">
+      <div className="flex flex-col gap-4">
+        {onMenuClick && (
+          <div className="flex items-center gap-3 lg:hidden">
+            <button onClick={onMenuClick} className="p-2 bg-white/5 border border-white/10 rounded-xl text-white hover:bg-white/10 transition">
+               <Menu className="w-5 h-5" />
+            </button>
+            <a href={`/?terminal=${terminal}`} className="p-2 hover:bg-white/5 rounded-xl transition text-white/50 border border-transparent hover:border-white/10">
+               <ChevronLeft className="w-5 h-5" />
+            </a>
+          </div>
+        )}
+        <h1 className="text-2xl lg:text-3xl font-black bg-gradient-to-r from-rose-400 to-orange-400 bg-clip-text text-transparent flex flex-wrap items-center gap-3 lg:gap-4 tracking-tighter">
           DIAGNÓSTICO DE ANOMALIAS
-          <span className="text-[11px] font-black bg-rose-500/20 text-rose-400 px-3 py-1.5 rounded-lg tracking-widest uppercase mt-1 lg:mt-0 shadow-inner">Outliers Engine</span>
+          <span className="text-[10px] lg:text-[11px] font-black bg-rose-500/20 text-rose-400 px-3 py-1.5 rounded-lg tracking-widest uppercase mt-1 lg:mt-0 shadow-inner">Outliers Engine</span>
         </h1>
-        <div className="flex items-center gap-3 mt-3">
+        <div className="flex items-center gap-3 mt-1 lg:mt-3 flex-wrap">
           <span className="text-sm uppercase font-black tracking-[0.3em] text-white/70">{terminal}</span>
           <div className="w-1.5 h-1.5 rounded-full bg-white/20"></div>
           <p className="text-xs text-white/50 uppercase tracking-widest font-bold">Investigação de Cauda Longa e Simulação de Cenários (What-If)</p>
         </div>
-      </div>
-      <div className="flex gap-4 mt-8 md:mt-0 items-center flex-wrap md:flex-nowrap">
-        <div className="flex gap-2 shadow-xl bg-[#0b121c] border border-white/10 p-2 rounded-[24px]">
+      <div className="flex gap-4 mt-4 xl:mt-0 items-center flex-wrap">
+        <div className="flex flex-col sm:flex-row gap-2 shadow-xl bg-[#0b121c] border border-white/10 p-2 rounded-[24px] w-full sm:w-auto">
           <div className="relative group">
             <input
               type="date"

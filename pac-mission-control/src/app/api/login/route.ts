@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { login } from '@/lib/auth';
-import fs from 'fs/promises';
-import path from 'path';
-
-const USERS_FILE = process.env.USERS_PATH || path.join(process.cwd(), 'src/data/users.json');
+import db from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
@@ -11,14 +8,9 @@ export async function POST(request: Request) {
     const cleanEmail = email?.trim().toLowerCase();
     const cleanPassword = password?.trim();
 
-    // Ler usuário do store JSON dinamicamente (evita cache do import)
-    const data = await fs.readFile(USERS_FILE, 'utf-8');
-    const users = JSON.parse(data);
-
-    const user = users.find((u: any) => 
-      u.email.toLowerCase() === cleanEmail && 
-      u.password === cleanPassword
-    );
+    // Buscar usuário no banco SQLite
+    const user = db.prepare("SELECT * FROM users WHERE LOWER(email) = ? AND password = ?")
+                   .get(cleanEmail, cleanPassword) as any;
 
     if (!user) {
       return NextResponse.json(
@@ -37,6 +29,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, role: user.role });
   } catch (error) {
+    console.error('[Login API Error]:', error);
     return NextResponse.json(
       { error: 'Erro no servidor' },
       { status: 500 }

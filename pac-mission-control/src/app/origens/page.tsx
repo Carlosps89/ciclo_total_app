@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Loader2, Activity, X, Download, ChevronRight, TrendingUp, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Loader2, Activity, X, Download, ChevronRight, TrendingUp, CalendarClock, Menu } from 'lucide-react';
 import * as xlsx from 'xlsx';
 import clsx from 'clsx';
 import { VehicleItem } from '@/lib/types';
@@ -14,6 +14,9 @@ const OriginsMap = dynamic(
   () => import('@/components/OriginsMap').then(mod => mod.OriginsMap),
   { ssr: false, loading: () => <div className="w-full h-full bg-gray-900 animate-pulse" /> }
 );
+import { SidebarMenu } from '@/components/SidebarMenu';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
+
 
 // Types
 interface OriginSummary {
@@ -44,6 +47,19 @@ function OrigensContent() {
   const [availableProdutos, setAvailableProdutos] = useState<string[]>([]);
   const [selectedPraca, setSelectedPraca] = useState<string>('TODAS');
   const [availablePracas, setAvailablePracas] = useState<string[]>(['TODAS']);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/session').then(res => {
+      if (res.ok) res.json().then(data => setSession(data.user));
+    }).catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    const res = await fetch('/api/logout', { method: 'POST' });
+    if (res.ok) window.location.href = '/login';
+  };
 
   // Load Praca from Local Storage
   useEffect(() => {
@@ -148,6 +164,14 @@ function OrigensContent() {
   return (
     <div className="h-screen w-full bg-[#050505] text-gray-200 font-sans selection:bg-green-500/30 overflow-y-auto overflow-x-hidden flex flex-col relative custom-scrollbar">
       
+      <SidebarMenu 
+         isOpen={isMenuOpen} 
+         onClose={() => setIsMenuOpen(false)} 
+         terminal="TRO" 
+         session={session} 
+         onLogout={handleLogout} 
+      />
+
       {/* BACKGROUND MAP (MAIN HERO) */}
       <div className="absolute inset-0 z-0 bg-gray-900">
           {isMounted && (
@@ -174,9 +198,12 @@ function OrigensContent() {
 
       {/* FLOATING HEADER / CONTROLS */}
       <header className="absolute top-4 left-4 right-4 md:right-80 md:top-6 md:left-6 z-10 flex flex-col gap-3 md:gap-4 pointer-events-none">
-        {/* Title & Back Button */}
+        {/* Title & Back/Menu Button */}
         <div className="flex items-center gap-3 md:gap-4 pointer-events-auto">
-          <Link href="/" className="p-2.5 md:p-3 bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-2xl transition text-white/70 hover:text-white hover:border-green-500/50 group">
+          <button onClick={() => setIsMenuOpen(true)} className="lg:hidden p-2.5 bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl transition text-white hover:border-green-500/50">
+             <Menu className="w-5 h-5" />
+          </button>
+          <Link href="/" className="hidden lg:flex p-2.5 md:p-3 bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl md:rounded-2xl shadow-2xl transition text-white/70 hover:text-white hover:border-green-500/50 group">
             <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           </Link>
           <div className="bg-black/60 backdrop-blur-xl border border-white/10 p-3 px-4 md:p-4 md:px-6 rounded-2xl md:rounded-3xl shadow-2xl">
@@ -230,7 +257,7 @@ function OrigensContent() {
       {/* MOBILE TRIGGER FOR RANKING */}
       <button 
         onClick={() => setIsRankingOpen(true)}
-        className="md:hidden fixed bottom-6 right-6 z-20 p-4 bg-green-500 text-black rounded-full shadow-2xl animate-bounce-subtle flex items-center gap-2"
+        className="md:hidden fixed bottom-24 right-6 z-20 p-4 bg-green-500 text-black rounded-full shadow-2xl animate-bounce-subtle flex items-center gap-2"
       >
         <TrendingUp className="w-6 h-6" />
         <span className="font-black text-xs uppercase tracking-tighter pr-1">Ranking</span>
@@ -328,6 +355,8 @@ function OrigensContent() {
          produto={selectedProduto}
          praca={selectedPraca}
       />
+
+      <MobileBottomNav />
     </div>
   );
 }
@@ -411,7 +440,7 @@ function OriginDrawer({ origem, onClose, terminal, produto, praca }: { origem: s
 
     return (
         <div 
-           className={`fixed inset-y-0 right-0 w-[550px] bg-gray-950 border-l border-gray-800 shadow-2xl z-50 transform translation-transform duration-300 flex flex-col ${origem ? 'translate-x-0' : 'translate-x-full'}`}
+           className={`fixed inset-y-0 right-0 w-full lg:w-[550px] bg-gray-950 border-l border-gray-800 shadow-2xl z-[60] transform translation-transform duration-300 flex flex-col pb-20 lg:pb-0 ${origem ? 'translate-x-0' : 'translate-x-full'}`}
         >
             <div className="h-16 border-b border-gray-800 flex items-center justify-between px-6 shrink-0 bg-gray-900/50">
                 <div>

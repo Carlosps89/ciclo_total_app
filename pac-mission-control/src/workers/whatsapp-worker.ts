@@ -4,6 +4,9 @@ import path from 'path';
 // Load Env
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
+import * as http from 'http';
+
+import axios from 'axios';
 import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import qrcode from 'qrcode-terminal';
 import cron from 'node-cron';
@@ -12,21 +15,57 @@ import db from '../lib/db';
 import { formatWhatsAppSummary } from '../lib/agent/whatsapp-ai';
 import { syncFinishedGMOs } from '../lib/sync-gmo';
 import { captureDashboardScreenshot } from '../lib/agent/screenshot';
-import { getVehicleVerification, getPlazaDiagnostic } from '../lib/agent/pac-analyst';
-import { MessageMedia } from 'whatsapp-web.js';
+import { getVehicleVerification, getPlazaDiagnostic, getFraudAudit } from '../lib/agent/pac-analyst';
+import { processPrescriptiveLogic } from '../lib/prescriptive-engine';
 
 console.log("=========================================");
 console.log("🤖 INICIANDO BOT DO WHATSAPP - PAC IA");
+console.log("🚀 Versão: 2.0.2 (Estabilização Ativa)");
 console.log("=========================================");
 
 const client = new Client({
     authStrategy: new LocalAuth({ dataPath: path.resolve(process.cwd(), '.wwebjs_auth') }),
     puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-extensions',
+            '--disable-web-security'
+        ],
+        protocolTimeout: 60000
     }
 });
 
 let myNumberId: string | null = null;
+
+/**
+ * Resolve dinamicamente o ID correto para um número (handles 9th digit and LID)
+ */
+async function resolveChatId(number: string): Promise<string | null> {
+    if (!number) return null;
+    const cleanNumber = number.replace(/\D/g, '');
+    if (number.includes('@')) return number;
+
+    const fallback = cleanNumber.length > 14 ? `${cleanNumber}@lid` : `${cleanNumber}@c.us`;
+
+    try {
+        // Tenta resolver via navegador, mas com timeout agressivo e catch total
+        const idInfo = await Promise.race([
+            client.getNumberId(cleanNumber),
+            new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Timeout resolution')), 5000))
+        ]) as { _serialized: string } | null;
+
+        if (idInfo) {
+            return idInfo._serialized;
+        }
+        return fallback;
+    } catch (e) {
+        console.warn(`[WhatsApp/Resolução] 🛡️ Fallback ativado para ${cleanNumber}: ${e.message}`);
+        return fallback;
+    }
+}
 
 client.on('qr', (qr: string) => {
     console.log('\n[WhatsApp] 📱 Qrcode gerado! Escaneie via WhatsApp:');
@@ -42,6 +81,7 @@ client.on('ready', async () => {
     await client.sendMessage(myNumberId, "🤖 *PAC Bot Online:* Conexão estabelecida com sucesso! O Relatório diário de D-1 está agendado para 06:00 BRT.");
     
     startCronJobs();
+    startFraudMonitor(); // Monitor de alertas de fraude
 });
 
 // Responde a comandos basais
@@ -114,13 +154,23 @@ client.on('message_create', async (msg) => {
         await sendDailyReport(target, true); // forceSync = true
     }
 
+    if (body === '/fastpass') {
+        const target = msg.fromMe ? msg.to : msg.from;
+        console.log(`[WhatsApp] Gatilho ${body} ativado para ${target}`);
+        
+        await client.sendMessage(target, "⚡ *Fast Pass:* Sincronizando com as antenas e buscando dados D e D-1...");
+        const { getFastPassReport } = require('../lib/agent/fast-pass-report');
+        const report = await getFastPassReport('TRO');
+        await client.sendMessage(target, report);
+    }
+
     if (body === '/painel' || body === '/print') {
         const target = msg.fromMe ? msg.to : msg.from;
         await client.sendMessage(target, "📸 *CCO Rumo:* Gerando captura do painel em alta definição... Por favor, aguarde alguns segundos.");
         
         try {
-            const buffer = await captureDashboardScreenshot();
-            const media = new MessageMedia('image/jpeg', buffer.toString('base64'), 'painel_operacional.jpg');
+            const b64 = await captureDashboardScreenshot();
+            const media = new MessageMedia('image/jpeg', b64, 'painel_operacional.jpg');
             await client.sendMessage(target, media, { caption: "📊 *Painel de Operações - Tempo Real*" });
         } catch (e) {
             console.error("[WhatsApp] Erro ao gerar print:", e);
@@ -161,9 +211,20 @@ client.on('message_create', async (msg) => {
             await client.sendMessage(target, diag.text);
             
             if (diag.chart) {
-                const media = new MessageMedia('image/jpeg', diag.chart.toString('base64'), `tendencia_${arg}.jpg`);
+                const media = new MessageMedia('image/jpeg', diag.chart, `tendencia_${arg}.jpg`);
                 await client.sendMessage(target, media);
             }
+        }
+    }
+
+    if (body === '/forecast' || body === '/previsao') {
+        const target = msg.fromMe ? msg.to : msg.from;
+        await client.sendMessage(target, "🧠 *IA Prescritiva:* Consultando motor Gemini 1.5 Pro e Projeções de Inércia... Aguarde.");
+        try {
+            const prescriptive = await processPrescriptiveLogic('TRO');
+            await client.sendMessage(target, (prescriptive as any).insight);
+        } catch (e) {
+            await client.sendMessage(target, "❌ Erro ao gerar previsão via IA.");
         }
     }
 
@@ -348,11 +409,17 @@ async function sendDailyReport(chatId: string, forceSync: boolean = false) {
         console.log(`[WhatsApp] 🧠 Invocando Gemini...`);
         const relatorio = await formatWhatsAppSummary(d_data, d1_data, m_data, y_data, root_causes, { roo_d1, roo_m, roo_rca });
 
-        // Mais robusto para evitar erro de LID: buscar o chat primeiro
-        const chat = await client.getChatById(chatId);
-        await chat.sendMessage(relatorio);
+        // Mais robusto para evitar erro de LID: resolver o ID correto primeiro
+        const resolvedId = await resolveChatId(chatId);
+        if (!resolvedId) {
+            console.error(`[WhatsApp] Falha crítica: Não foi possível resolver o ID para ${chatId}`);
+            return;
+        }
+
+        const chat = await client.getChatById(resolvedId);
+        await chat.sendMessage(relatorio); // Agora envia apenas o relatório técnico sem o forecast automático
         
-        console.log(`[WhatsApp] 🚀 Relatório enviado com sucesso para ${chatId}!`);
+        console.log(`[WhatsApp] 🚀 Relatório enviado com sucesso para ${resolvedId}!`);
     } catch (e) {
         console.error("[WhatsApp] Erro ao enviar relatório:", e);
     }
@@ -360,15 +427,34 @@ async function sendDailyReport(chatId: string, forceSync: boolean = false) {
 
 async function sendBulkReports() {
     console.log("[WhatsApp] 🚀 Iniciando disparo em massa...");
-    const contacts = db.prepare("SELECT phone_number FROM whatsapp_contacts WHERE is_active = 1").all() as { phone_number: string }[];
     
+    // 1. Busca usuários com plano diário ativo na nova tabela de usuários
+    const userRecipients = db.prepare(`
+        SELECT whatsapp_number FROM users 
+        WHERE whatsapp_number IS NOT NULL 
+          AND json_extract(reports_config, '$.daily') = 1
+    `).all() as { whatsapp_number: string }[];
+
+    // 2. Busca contatos legados (retrocompatibilidade)
+    const legacyContacts = db.prepare("SELECT phone_number FROM whatsapp_contacts WHERE is_active = 1").all() as { phone_number: string }[];
+    
+    // Merge de números únicos
+    const allNumbers = new Set<string>();
+    userRecipients.forEach(u => allNumbers.add(u.whatsapp_number.replace(/\D/g, '')));
+    legacyContacts.forEach(c => allNumbers.add(c.phone_number.replace(/\D/g, '')));
+
+    console.log(`[WhatsApp] Destinatários brutos identificados: ${allNumbers.size}`);
+
     // Sincroniza uma vez antes de disparar para todos
     await syncFinishedGMOs('TRO');
 
-    for (const c of contacts) {
-        const chatId = c.phone_number.includes('@') ? c.phone_number : `${c.phone_number}@c.us`;
-        await sendDailyReport(chatId);
-        await sleep(2000); // 2 segundos de pausa entre envios
+    for (const num of allNumbers) {
+        try {
+            await sendDailyReport(num);
+            await sleep(2000); // 2 segundos de pausa entre envios
+        } catch (err) {
+            console.error(`[WhatsApp/Bulk] Erro ao processar envio para ${num}:`, err);
+        }
     }
 }
 
@@ -382,5 +468,196 @@ function startCronJobs() {
         timezone: "America/Sao_Paulo"
     });
 }
+
+let isProcessingFraud = false;
+
+function startFraudMonitor() {
+    console.log("[WhatsApp] 🕵️ Monitor de Fraudes Ativado (Polling: 30s)");
+    
+    const poll = async () => {
+        if (isProcessingFraud) return;
+        isProcessingFraud = true;
+
+        try {
+            // Busca alertas pendentes
+            const pending = db.prepare("SELECT * FROM fraud_alerts WHERE status = 'PENDING'").all() as any[];
+            
+            for (const alert of pending) {
+                try {
+                    console.log(`[WhatsApp/Fraud] Processando alerta ID ${alert.id} para ${alert.placa} [Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB]`);
+                    
+                    // Decodifica o payload se existir
+                    let rawPayload = null;
+                    if (alert.payload_json) {
+                        try { rawPayload = JSON.parse(alert.payload_json); } catch {}
+                    }
+
+                    // Gera o "Pente Fino"
+                    const report = await getFraudAudit(alert.placa, alert.data_suspeita || alert.data_suspeita, alert.indicio, rawPayload);
+
+                    // Identifica destinatários para alertas de fraude
+                    const fraudRecipients = db.prepare(`
+                        SELECT whatsapp_number FROM users 
+                        WHERE whatsapp_number IS NOT NULL 
+                          AND json_extract(reports_config, '$.fraud') = 1
+                    `).all() as { whatsapp_number: string }[];
+
+                    const adminEnv = (process.env.ADMIN_PHONE_NUMBER || '').split('@')[0].replace(/\D/g, '');
+                    
+                    const reportTargets = new Set<string>();
+                    
+                    if (adminEnv) {
+                        const resAdmin = await resolveChatId(adminEnv);
+                        if (resAdmin) reportTargets.add(resAdmin);
+                    }
+
+                    for (const u of fraudRecipients) {
+                        const resUser = await resolveChatId(u.whatsapp_number);
+                        if (resUser) reportTargets.add(resUser);
+                    }
+
+                    if (report && reportTargets.size > 0) {
+                        const fullMsg = [
+                            `🚨 *ALERTA DE SEGURANÇA (AUTOMÁTICO)*`,
+                            `----------------------------------`,
+                            report
+                        ].join('\n');
+
+                        // Preparar mídias apenas UMA VEZ por alerta para economizar CPU/RAM
+                        let preparedMedia: MessageMedia[] = [];
+                        let slicingActive = false;
+                        let originalCount = 0;
+
+                        const fotosStr = (alert.fotos || '');
+                        const isTooLarge = fotosStr.length > 10 * 1024 * 1024; // 10MB
+                        const shouldSlice = fotosStr.length > 5 * 1024 * 1024; // 5MB
+
+                        if (fotosStr && fotosStr !== '[]' && !isTooLarge) {
+                            try {
+                                let rawPhotos = JSON.parse(fotosStr);
+                                if (Array.isArray(rawPhotos)) {
+                                    originalCount = rawPhotos.length;
+                                    if (shouldSlice && originalCount > 5) {
+                                        rawPhotos = rawPhotos.slice(0, 5);
+                                        slicingActive = true;
+                                    }
+
+                                    for (let url of rawPhotos) {
+                                        try {
+                                            if (typeof url === 'object') {
+                                                url = url.AbsoluteUri || url.ServerRelativeUrl || url.Value || JSON.stringify(url);
+                                            }
+                                            const cleanUrl = String(url).trim();
+                                            const isBase64 = cleanUrl.length > 500 || cleanUrl.startsWith('data:image');
+
+                                            if (isBase64) {
+                                                let base64Content = cleanUrl.includes(',') ? cleanUrl.split(',')[1] : cleanUrl;
+                                                base64Content = base64Content.replace(/\\n/g, '').replace(/\\r/g, '').replace(/\n/g, '').replace(/\r/g, '').replace(/\s/g, '').trim();
+                                                preparedMedia.push(new MessageMedia('image/jpeg', base64Content, 'foto.jpg'));
+                                            } else if (cleanUrl.startsWith('http')) {
+                                                const response = await axios.get(cleanUrl, { responseType: 'arraybuffer', timeout: 15000 });
+                                                const contentType = response.headers['content-type'] || 'image/jpeg';
+                                                const base64 = Buffer.from(response.data, 'binary').toString('base64');
+                                                preparedMedia.push(new MessageMedia(contentType, base64, 'foto.jpg'));
+                                            }
+                                        } catch (e) {
+                                            console.error(`[WhatsApp/Fraud] Erro ao preparar mídia:`, e.message);
+                                        }
+                                    }
+                                }
+                            } catch (pErr) {
+                                console.error("[WhatsApp/Fraud] Erro ao dar parse nas fotos:", pErr);
+                            }
+                        } else if (isTooLarge) {
+                            console.warn(`[WhatsApp/Fraud] Payload ID ${alert.id} EXTREMAMENTE GRANDE (${(fotosStr.length/1024/1024).toFixed(1)}MB). Pulando fotos.`);
+                        }
+
+                        for (const target of reportTargets) {
+                            try {
+                                await client.sendMessage(target, fullMsg);
+                                
+                                // Enviar mídias preparadas
+                                if (preparedMedia.length > 0) {
+                                    if (slicingActive) {
+                                        await client.sendMessage(target, `⚠️ _Payload volumoso (${(fotosStr.length/1024/1024).toFixed(1)}MB). Enviando as primeiras 5 fotos de ${originalCount}._`);
+                                    }
+                                    for (const media of preparedMedia) {
+                                        await client.sendMessage(target, media);
+                                    }
+                                }
+                                console.log(`[WhatsApp/Fraud] Notificação enviada para ${target}.`);
+                            } catch (sendErr) {
+                                console.error(`[WhatsApp/Fraud] Falha ao enviar para ${target}:`, sendErr);
+                            }
+                        }
+                    } else if (reportTargets.size === 0) {
+                        console.warn("[WhatsApp/Fraud] Nenhum destinatário configurado para alertas de fraude.");
+                    } else {
+                        console.warn(`[WhatsApp/Fraud] Auditoria retornou nula para placa ${alert.placa}.`);
+                    }
+
+                    // Marca como processado mesmo que falte algo, para não travar a fila
+                    db.prepare("UPDATE fraud_alerts SET status = 'SENT' WHERE id = ?").run(alert.id);
+
+                } catch (itemErr) {
+                    console.error(`[WhatsApp/Fraud] Erro fatal no item ${alert.id}:`, itemErr);
+                    // Marca como erro para não tentar infinitamente se for erro de lógica
+                    db.prepare("UPDATE fraud_alerts SET status = 'ERROR' WHERE id = ?").run(alert.id);
+                }
+            }
+        } catch (e) {
+            console.error("[WhatsApp/Fraud] Erro no monitor:", e);
+        } finally {
+            isProcessingFraud = false;
+            setTimeout(poll, 30000); // Agenda o próximo poll
+        }
+    };
+
+    poll();
+}
+
+const server = http.createServer((req, res) => {
+    if (req.url === '/tunnel-link' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk.toString());
+        req.on('end', async () => {
+            try {
+                const data = JSON.parse(body);
+                if (data.link) {
+                    const cleanLink = data.link.replace(/[^a-zA-Z0-9.:/-]/g, '');
+                    const adminEnv = (process.env.ADMIN_PHONE_NUMBER || '').split('@')[0].replace(/\D/g, '');
+                    if (adminEnv) {
+                        const adminId = await resolveChatId(adminEnv);
+                        if (adminId) {
+                            await client.sendMessage(adminId, `🌐 *Novo Link de Acesso Externo:*\n${cleanLink}`);
+                            res.writeHead(200);
+                            res.end('Enviado');
+                            return;
+                        }
+                    }
+                }
+            } catch(e) {
+                console.error("[WhatsApp] Erro ao processar link do tunnel", e);
+            }
+            res.writeHead(400);
+            res.end('Erro');
+        });
+    } else {
+        res.writeHead(404);
+        res.end();
+    }
+});
+
+server.on('error', (e: any) => {
+    if (e.code === 'EADDRINUSE') {
+        console.warn('[WhatsApp] ⚠️ Porta 3005 já está em uso. (Outra instância do bot pode estar rodando em background).');
+    } else {
+        console.error('[WhatsApp] ❌ Erro no servidor local:', e);
+    }
+});
+
+server.listen(3005, () => {
+    console.log('[WhatsApp] 🌐 Servidor local escutando na porta 3005 para eventos externos.');
+});
 
 client.initialize();

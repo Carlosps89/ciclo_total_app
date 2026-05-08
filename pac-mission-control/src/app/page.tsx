@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
-import { Menu, X, Map, CalendarDays, Settings, LogOut, Shield, User, Activity, TrendingUp, Calendar, ChevronRight, Download, Loader2, Gauge, AlertCircle, Clock, CalendarClock, CheckCircle, Search, Target } from 'lucide-react';
+import { Menu, X, Map, CalendarDays, Settings, LogOut, Shield, User, Activity, TrendingUp, Calendar, ChevronRight, Download, Loader2, Gauge, AlertCircle, Clock, CalendarClock, CheckCircle, Search, Target, Zap } from 'lucide-react';
 import { PerformanceCockpitDrawer } from '@/components/PerformanceCockpitDrawer';
 import { CicloTotalHourlyChart } from '@/components/CicloTotalHourlyChart';
 import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
@@ -392,6 +392,15 @@ function DashboardContent() {
                         </Link>
 
                         <Link 
+                            href={`/fast-pass?terminal=${terminal}`}
+                            className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            onClick={() => setIsMenuOpen(false)}
+                        >
+                            <Zap className="w-5 h-5 text-yellow-500" />
+                            <span className="font-bold">Radar Fast Pass</span>
+                        </Link>
+
+                        <Link 
                             href={`/historico?terminal=${terminal}`}
                             className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
                             onClick={() => setIsMenuOpen(false)}
@@ -729,6 +738,15 @@ function DashboardContent() {
                       >
                           <Map className="w-5 h-5 text-emerald-500" />
                           <span className="font-bold">Mapa de Origens</span>
+                      </Link>
+
+                      <Link 
+                          href={`/fast-pass?terminal=${terminal}`}
+                          className="flex items-center gap-3 p-4 rounded-xl text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+                          onClick={() => setIsMenuOpen(false)}
+                      >
+                          <Zap className="w-5 h-5 text-yellow-500" />
+                          <span className="font-bold">Radar Fast Pass</span>
                       </Link>
 
                       <Link 

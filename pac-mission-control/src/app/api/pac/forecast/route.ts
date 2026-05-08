@@ -1,313 +1,53 @@
 import { NextResponse } from 'next/server';
-import { runQuery, ATHENA_DATABASE, getAthenaView, getSchemaMap } from '@/lib/athena';
-import { getCleanMap } from '@/lib/athena-sql';
-import { getCached, setCached } from '@/lib/cache';
-import { applyPracaFilter } from '@/lib/pracas';
-import { ResultSet } from '@aws-sdk/client-athena';
+import db from '@/lib/db';
+import { processPrescriptiveLogic } from '@/lib/prescriptive-engine';
 
-const CACHE_TTL: number = 15 * 60 * 1000; // 15 minutes
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const terminal = searchParams.get('terminal') || 'TRO';
+  const runPrescriptive = searchParams.get('run_prescriptive') === 'true';
 
-export async function GET(request: Request): Promise<NextResponse> {
   try {
-    const { searchParams }: URL = new URL(request.url);
-    const terminal: string = searchParams.get('terminal') || 'TRO';
-    const produto: string | null = searchParams.get('produto');
-    const praca: string | null = searchParams.get('praca');
+    // 1. Dados Históricos (últimos 30 dias de features)
+    const history = db.prepare(`
+      SELECT day, volume, avg_ciclo_total_h as ciclo_h, 
+             load_programado, load_fila_externa, load_transito, load_fila_interna, 
+             'REAL' as type 
+      FROM gmo_features 
+      WHERE terminal = ? AND day >= date('now', '-15 days')
+      ORDER BY day ASC
+    `).all(terminal);
 
-    const cacheKey = `pac_forecast_v3_${terminal}_${produto || 'all'}_${praca || 'all'}`;
-    const cachedData = getCached(cacheKey);
-    if (cachedData) return NextResponse.json(cachedData);
+    // 2. Dados Projetados (próximos 7 dias)
+    const forecast = db.prepare(`
+      SELECT day, pred_volume as volume, pred_ciclo_total_h as ciclo_h, 
+             pred_load_programado as load_programado, 
+             pred_load_fila_externa as load_fila_externa, 
+             pred_load_transito as load_transito, 
+             pred_load_fila_interna as load_fila_interna, 
+             recom_acao, insight_ia, 'PROJ' as type
+      FROM gmo_forecast
+      WHERE terminal = ? AND day >= date('now')
+      ORDER BY day ASC
+    `).all(terminal);
 
-    const TARGET_VIEW: string = getAthenaView();
-    const isCleanData = TARGET_VIEW === 'pac_clean_data';
-    const map: Record<string, string> = await getSchemaMap(TARGET_VIEW);
-    const rawCols = Object.keys(map); // Schema map keys are the actual columns
-    
-    // Additional dynamic mappings for movement and granular status
-    const colMovimento = rawCols.find(c => ['MOVIMENTO', 'DS_MOVIMENTO', 'TIPO_MOVIMENTO'].includes(c.toUpperCase()));
-    const colOperacao = rawCols.find(c => ['OPERACAO', 'DS_OPERACAO', 'TIPO_OPERACAO'].includes(c.toUpperCase()));
-    const colSituacao = map.situacao || 'DS_SITUACAO';
-
-    const pracaFilter = applyPracaFilter(terminal, praca, `base.${map.origem}`, true);
-    const produtoFilter = produto ? `AND base.${map.produto} = '${produto}'` : '';
-    
-    // User requested focus on DESCARGA
-    let movementFilter = '';
-    if (colMovimento && colOperacao) {
-      movementFilter = `AND (base.${colMovimento} = 'DESCARGA' OR base.${colOperacao} = 'DESCARGA')`;
-    } else if (colMovimento) {
-      movementFilter = `AND base.${colMovimento} = 'DESCARGA'`;
-    } else if (colOperacao) {
-      movementFilter = `AND base.${colOperacao} = 'DESCARGA'`;
+    // 3. (Opcional) Rodar motor prescritivo para atualizar insight
+    let insightia = forecast.length > 0 ? (forecast[0] as any).insight_ia : null;
+    if (runPrescriptive) {
+        const prescriptiveResult = await processPrescriptiveLogic(terminal);
+        insightia = (prescriptiveResult as any).insight;
     }
-    console.log(`[Forecast-Debug] Filters: Movement=${movementFilter} Terminal=${terminal} Producto=${produto}`);
 
-    const summaryQuery: string = `
-      ${pracaFilter.cte}
-      ${pracaFilter.cte ? ',' : 'WITH'} raw_data AS (
-          SELECT 
-            ${map.id} as _col_id,
-            ${map.terminal} as _col_terminal,
-            ${map.dt_emissao} as _col_emissao,
-            ${map.dt_cheguei} as _col_cheguei,
-            ${map.dt_chegada} as _col_chegada,
-            ${map.dt_chamada} as _col_chamada,
-            ${map.dt_peso_saida} as _col_peso_saida,
-            ${map.dt_agendamento} as _col_agendamento,
-            ${map.janela_agendamento || 'janela_agendamento'} as _col_janela,
-            ${colSituacao} as _col_situacao,
-            greatest(
-                coalesce(try_cast(${map.dt_peso_saida} as timestamp), timestamp '1900-01-01 00:00:00'), 
-                coalesce(try_cast(${map.dt_chegada} as timestamp), timestamp '1900-01-01 00:00:00'),
-                coalesce(try_cast(${map.dt_chamada} as timestamp), timestamp '1900-01-01 00:00:00'),
-                coalesce(try_cast(${map.dt_cheguei} as timestamp), timestamp '1900-01-01 00:00:00'),
-                coalesce(try_cast(${map.dt_agendamento} as timestamp), timestamp '1900-01-01 00:00:00'),
-                coalesce(try_cast(${map.dt_emissao} as timestamp), timestamp '1900-01-01 00:00:00')
-            ) as ts_ult
-          FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
-          ${pracaFilter.join}
-          WHERE base.${map.terminal} = '${terminal}'
-            ${produtoFilter}
-            ${movementFilter}
-      ),
-      dedupped AS (
-          SELECT * FROM (
-              SELECT *, row_number() OVER (PARTITION BY _col_id ORDER BY ts_ult DESC) as rn
-              FROM raw_data
-          ) WHERE rn = 1
-      ),
-      canceled_ids AS (
-          SELECT distinct ${map.id} as cid
-          FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}"
-          WHERE (
-            upper(coalesce(${colSituacao}, '')) LIKE '%CANCEL%' OR 
-            upper(coalesce(${map.evento || 'evento_descricao'}, '')) LIKE '%CANCEL%'
-          )
-          AND ${map.terminal} = '${terminal}'
-      ),
-      active AS (
-          SELECT *,
-             greatest(
-              coalesce(try_cast(_col_chegada as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(_col_chamada as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(_col_cheguei as timestamp), timestamp '1900-01-01 00:00:00')
-            ) as ts_last_event
-          FROM dedupped
-          WHERE (try_cast(_col_peso_saida as timestamp) IS NULL OR coalesce(cast(_col_peso_saida as varchar), '') = '')
-            AND _col_id NOT IN (SELECT cid FROM canceled_ids)
-      ),
-      categorized AS (
-          SELECT 
-            _col_id,
-            CASE 
-              WHEN try_cast(_col_chegada as timestamp) IS NOT NULL THEN 'Operação Terminal'
-              WHEN try_cast(_col_chamada as timestamp) IS NOT NULL THEN 'Trânsito Externo'
-              WHEN try_cast(_col_cheguei as timestamp) IS NOT NULL THEN 'Fila Externa'
-              ELSE 'Programado'
-            END as status_operacional,
-            date_diff('second', coalesce(try_cast(_col_chegada as timestamp), try_cast(_col_chamada as timestamp), try_cast(_col_cheguei as timestamp), try_cast(_col_agendamento as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as tempo_status_h,
-            date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as tempo_acumulado_h
-          FROM active
-          WHERE 
-            (
-              -- Ghost Removal: if it entered the terminal, it must be in the last 3 days
-              (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
-              OR
-              -- Or it is a future/recent appt
-              (ts_last_event = timestamp '1900-01-01' AND try_cast(_col_agendamento as timestamp) >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo') AND try_cast(_col_agendamento as timestamp) <= date_add('day', 3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
-            )
-            AND (
-              -- Stage specific filters to avoid old ghosts/stuck vehicles
-              CASE 
-                WHEN _col_cheguei IS NOT NULL AND _col_chamada IS NULL THEN date_diff('hour', try_cast(_col_cheguei as timestamp), current_timestamp AT TIME ZONE 'America/Sao_Paulo') <= 48
-                ELSE true
-              END
-            )
-            AND (
-              try_cast(_col_cheguei as timestamp) IS NOT NULL -- This is any stage from Fila Externa onwards
-              OR try_cast(_col_janela as timestamp) >= date_add('hour', -24, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
-            )
-      ),
-      benchmarks AS (
-          SELECT 'Fila Externa' as status_operacional, 2.0 as avg_hist_h
-          UNION ALL SELECT 'Trânsito Externo', 0.5
-          UNION ALL SELECT 'Operação Terminal', 4.0
-          UNION ALL SELECT 'Programado', 0.0
-      )
-      SELECT 
-        c.status_operacional,
-        avg(c.tempo_status_h) as avg_atual_h,
-        count(*) as volume,
-        max(b.avg_hist_h) as avg_hist_h,
-        approx_percentile(c.tempo_status_h, 0.1) as p10,
-        approx_percentile(c.tempo_status_h, 0.25) as p25,
-        approx_percentile(c.tempo_status_h, 0.75) as p75,
-        avg(c.tempo_acumulado_h) as avg_acumulado_h,
-        approx_percentile(c.tempo_acumulado_h, 0.1) as p10_acumulado,
-        approx_percentile(c.tempo_acumulado_h, 0.25) as p25_acumulado,
-        approx_percentile(c.tempo_acumulado_h, 0.75) as p75_acumulado
-      FROM categorized c
-      LEFT JOIN benchmarks b ON b.status_operacional = c.status_operacional
-      GROUP BY 1
-      ORDER BY 
-        CASE c.status_operacional 
-          WHEN 'Programado' THEN 1 
-          WHEN 'Fila Externa' THEN 2 
-          WHEN 'Trânsito Externo' THEN 3 
-          WHEN 'Operação Terminal' THEN 4
-        END`;
-
-    console.log(`[Forecast-Debug] Final Summary Query:`, summaryQuery);
-
-    const [summaryResults, vehiclesResults]: [ResultSet | undefined, ResultSet | undefined] = await Promise.all([
-      runQuery(summaryQuery),
-      runQuery(`
-        ${pracaFilter.cte}
-        ${pracaFilter.cte ? ',' : 'WITH'} raw_data AS (
-            SELECT 
-              ${map.id} as id, ${map.placa} as placa, ${map.origem} as origem, 
-              ${map.dt_cheguei} as ch, ${map.dt_chamada} as cda, ${map.dt_chegada} as cga, 
-              ${map.dt_agendamento} as ag, ${map.dt_peso_saida} as ps,
-              ${map.dt_emissao} as em,
-              ${colSituacao} as sit,
-              ${map.janela_agendamento || 'janela_agendamento'} as jan
-            FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}" base
-            ${pracaFilter.join}
-            WHERE base.${map.terminal} = '${terminal}' ${produtoFilter} ${movementFilter}
-        ),
-        dedup AS (
-          SELECT * FROM (
-            SELECT *, row_number() OVER (PARTITION BY id ORDER BY greatest(
-              coalesce(try_cast(ps as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(ag as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(em as timestamp), timestamp '1900-01-01 00:00:00')
-            ) DESC) as rn FROM raw_data
-          ) WHERE rn = 1
-        ),
-        canceled_ids AS (
-           SELECT distinct ${map.id} as cid
-           FROM "${ATHENA_DATABASE}"."${TARGET_VIEW}"
-           WHERE (
-             upper(coalesce(${colSituacao}, '')) LIKE '%CANCEL%' OR 
-             upper(coalesce(${map.evento || 'evento_descricao'}, '')) LIKE '%CANCEL%'
-           )
-           AND ${map.terminal} = '${terminal}'
-        ),
-        active AS (
-          SELECT *,
-             greatest(
-              coalesce(try_cast(cga as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(cda as timestamp), timestamp '1900-01-01 00:00:00'),
-              coalesce(try_cast(ch as timestamp), timestamp '1900-01-01 00:00:00')
-            ) as ts_last_event
-          FROM dedup
-          WHERE (try_cast(ps as timestamp) IS NULL OR coalesce(cast(ps as varchar), '') = '')
-            AND id NOT IN (SELECT cid FROM canceled_ids)
-        )
-        SELECT 
-          id, placa, origem,
-          CASE 
-            WHEN try_cast(cga as timestamp) IS NOT NULL THEN 'Operação Terminal'
-            WHEN try_cast(cda as timestamp) IS NOT NULL THEN 'Trânsito Externo'
-            WHEN try_cast(ch as timestamp) IS NOT NULL THEN 'Fila Externa'
-            ELSE 'Programado'
-          END as status,
-          date_diff('second', coalesce(try_cast(cga as timestamp), try_cast(cda as timestamp), try_cast(ch as timestamp), try_cast(ag as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as horas,
-          date_diff('second', coalesce(try_cast(em as timestamp), try_cast(ag as timestamp)), current_timestamp AT TIME ZONE 'America/Sao_Paulo') / 3600.0 as horas_acumuladas,
-          cast(em as varchar) as dt_emissao,
-          cast(ag as varchar) as dt_agendamento,
-          cast(ch as varchar) as dt_cheguei,
-          cast(cda as varchar) as dt_chamada,
-          cast(cga as varchar) as dt_chegada,
-          cast(jan as varchar) as janela
-        FROM active
-        WHERE 
-          (
-            -- Ghost Removal: if it entered the terminal, it must be in the last 3 days
-            (ts_last_event > timestamp '1900-01-01' AND ts_last_event >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
-            OR
-            -- Or it is a future/recent appt
-            (ts_last_event = timestamp '1900-01-01' AND try_cast(ag as timestamp) >= date_add('day', -3, current_timestamp AT TIME ZONE 'America/Sao_Paulo') AND try_cast(ag as timestamp) <= date_add('day', 3, current_timestamp AT TIME ZONE 'America/Sao_Paulo'))
-          )
-          AND (
-            CASE 
-              WHEN try_cast(ch as timestamp) IS NOT NULL AND try_cast(cda as timestamp) IS NULL THEN date_diff('hour', try_cast(ch as timestamp), current_timestamp AT TIME ZONE 'America/Sao_Paulo') <= 48
-              ELSE true
-            END
-          )
-          AND (
-            try_cast(ch as timestamp) IS NOT NULL
-            OR try_cast(jan as timestamp) >= date_add('hour', -24, current_timestamp AT TIME ZONE 'America/Sao_Paulo')
-          )
-        LIMIT 1000
-      `)
-    ]);
-
-    const summary = summaryResults?.Rows?.slice(1).map((r) => {
-      const data = r.Data || [];
-      return {
-        status: data[0]?.VarCharValue || '',
-        avg_atual_h: parseFloat(data[1]?.VarCharValue || '0'),
-        volume: parseInt(data[2]?.VarCharValue || '0'),
-        avg_hist_h: parseFloat(data[3]?.VarCharValue || '0'),
-        p10: parseFloat(data[4]?.VarCharValue || '0'),
-        p25: parseFloat(data[5]?.VarCharValue || '0'),
-        p75: parseFloat(data[6]?.VarCharValue || '0'),
-        avg_acumulado_h: parseFloat(data[7]?.VarCharValue || '0'),
-        p10_acumulado: parseFloat(data[8]?.VarCharValue || '0'),
-        p25_acumulado: parseFloat(data[9]?.VarCharValue || '0'),
-        p75_acumulado: parseFloat(data[10]?.VarCharValue || '0')
-      };
-    }) || [];
-
-    const vehicles = vehiclesResults?.Rows?.slice(1).map((r) => {
-      const data = r.Data || [];
-      return {
-        id: data[0]?.VarCharValue || '',
-        placa: data[1]?.VarCharValue || '',
-        origem: data[2]?.VarCharValue || '',
-        status: data[3]?.VarCharValue || '',
-        horas: parseFloat(data[4]?.VarCharValue || '0'),
-        horas_acumuladas: parseFloat(data[5]?.VarCharValue || '0'),
-        timestamps: {
-            emissao: data[6]?.VarCharValue,
-            agendamento: data[7]?.VarCharValue,
-            cheguei: data[8]?.VarCharValue,
-            chamada: data[9]?.VarCharValue,
-            chegada: data[10]?.VarCharValue,
-            janela: data[11]?.VarCharValue
-        }
-      };
-    }) || [];
-
-    const maxAcumuladoByStage = summary.reduce((acc, s) => {
-      const topVehicles = vehicles
-        .filter(v => v.status === s.status)
-        .sort((a, b) => b.horas_acumuladas - a.horas_acumuladas)
-        .slice(0, 3)
-        .map(v => `${v.placa}(${v.horas_acumuladas.toFixed(1)}h)`);
-      acc[s.status] = topVehicles.join(', ');
-      return acc;
-    }, {} as Record<string, string>);
-
-    console.log(`[Forecast-Audit] Max Accumulated by Stage:`, maxAcumuladoByStage);
-    console.log(`[Forecast-Debug] Final Results: SummaryCount=${summary.length} VehiclesCount=${vehicles.length}`);
-
-    const response = {
+    return NextResponse.json({
       terminal,
-      updated_at: new Date().toISOString(),
-      summary,
-      vehicles
-    };
-
-    setCached(cacheKey, response, CACHE_TTL);
-    return NextResponse.json(response);
+      history,
+      forecast,
+      insight_ia: insightia,
+      meta_h: 46.5333 // Fallback meta
+    });
 
   } catch (error) {
     console.error("Forecast API Error:", error);
-    return NextResponse.json({ error: 'Failed to fetch queue analysis' }, { status: 500 });
+    return NextResponse.json({ error: 'Falha ao buscar projeções' }, { status: 500 });
   }
 }

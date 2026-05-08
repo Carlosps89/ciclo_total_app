@@ -6,12 +6,15 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
   ChevronLeft, Calendar, FileDown, 
-  Activity, TrendingUp, AlertCircle, Loader2, ArrowRight
+  Activity, TrendingUp, AlertCircle, Loader2, ArrowRight, Menu
 } from 'lucide-react';
 import { HistoricalHeatmap } from '@/components/HistoricalHeatmap';
 import { HistoricalTrendChart } from '@/components/HistoricalTrendChart';
 import HistoricalImpactModal from '@/components/HistoricalImpactModal';
 import CicloHourlyDiagnosticsDrawer from '@/components/CicloHourlyDiagnosticsDrawer';
+import { SidebarMenu } from '@/components/SidebarMenu';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
+
 // import * as xlsx from 'xlsx'; // Remove top-level import to avoid hydration/bundle issues
 import { VehicleItem } from '@/lib/types';
 
@@ -44,6 +47,19 @@ function HistoricalContent() {
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(60);
   const [mounted, setMounted] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/session').then(res => {
+      if (res.ok) res.json().then(data => setSession(data.user));
+    }).catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    const res = await fetch('/api/logout', { method: 'POST' });
+    if (res.ok) window.location.href = '/login';
+  };
 
   useEffect(() => {
     // Correct way to initialize dates to avoid hydration mismatch
@@ -186,26 +202,38 @@ function HistoricalContent() {
   );
 
   return (
-    <div className="h-screen bg-[#050505] text-gray-200 p-6 font-sans flex flex-col gap-6 overflow-y-auto overflow-x-hidden custom-scrollbar">
+    <div className="h-screen bg-[#050505] text-gray-200 p-4 lg:p-6 pb-20 lg:pb-6 font-sans flex flex-col gap-6 overflow-y-auto overflow-x-hidden custom-scrollbar">
+      
+      <SidebarMenu 
+         isOpen={isMenuOpen} 
+         onClose={() => setIsMenuOpen(false)} 
+         terminal={terminal} 
+         session={session} 
+         onLogout={handleLogout} 
+      />
+
       {/* HEADER */}
-      <header className="flex justify-between items-start border-b border-gray-800 pb-4 shrink-0">
+      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center border-b border-gray-800 pb-4 shrink-0 gap-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-4">
-            <Link href={`/?terminal=${terminal}`} className="p-2 hover:bg-gray-800 rounded-lg transition text-white/50 hover:text-white">
+            <button onClick={() => setIsMenuOpen(true)} className="lg:hidden p-2 bg-gray-900 border border-gray-800 rounded-lg text-white hover:bg-gray-800 transition">
+              <Menu className="w-5 h-5" />
+            </button>
+            <Link href={`/?terminal=${terminal}`} className="hidden lg:block p-2 hover:bg-gray-800 rounded-lg transition text-white/50 hover:text-white">
               <ChevronLeft className="w-5 h-5" />
             </Link>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-white uppercase flex items-center gap-3">
-                ANÁLISE HISTÓRICA - CICLO TOTAL
+              <h1 className="text-xl lg:text-2xl font-black tracking-tight text-white uppercase flex items-center gap-3 leading-none">
+                ANÁLISE HISTÓRICA
               </h1>
-              <p className="text-white/40 text-[10px] uppercase tracking-[0.2em] font-bold">
+              <p className="text-white/40 text-[9px] lg:text-[10px] mt-1 uppercase tracking-[0.2em] font-bold leading-none">
                 Performance Consolidada • Terminal {terminal}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 bg-gray-900/40 p-2 rounded-xl border border-gray-800">
+        <div className="flex flex-wrap items-center gap-3 bg-gray-900/40 p-2 rounded-xl border border-gray-800 w-full xl:w-auto">
            <div className="flex items-center gap-2 px-3 border-r border-gray-800">
               <Calendar className="w-4 h-4 text-blue-500" />
               <input 
@@ -403,9 +431,11 @@ function HistoricalContent() {
       />
 
       {/* FOOTER */}
-      <footer className="text-[9px] text-white/20 uppercase tracking-[0.3em] font-bold py-4 text-center border-t border-gray-900">
+      <footer className="hidden lg:block text-[9px] text-white/20 uppercase tracking-[0.3em] font-bold py-4 text-center border-t border-gray-900">
         PAC Mission Control • Historical Analytics Engine v2.0
       </footer>
+
+      <MobileBottomNav />
     </div>
   );
 }

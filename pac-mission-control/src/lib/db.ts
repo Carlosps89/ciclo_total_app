@@ -10,7 +10,9 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const dbPath = path.join(dataDir, 'pac_history.db');
-const db = new Database(dbPath);
+const db = new Database(dbPath, { timeout: 15000 });
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 15000');
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS gmo_history (
@@ -18,6 +20,8 @@ db.exec(`
         terminal TEXT,
         origem TEXT,
         produto TEXT,
+        cliente TEXT,
+        movimento TEXT,
         dt_inicio DATETIME,
         dt_peso_saida DATETIME,
         ciclo_total_h REAL,
@@ -30,6 +34,7 @@ db.exec(`
         area_verde_h REAL DEFAULT 0,
         dt_agendamento DATETIME,
         janela_agendamento DATETIME,
+        placa TEXT,
         last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_gmo_terminal ON gmo_history(terminal);
@@ -55,6 +60,58 @@ db.exec(`
         origem TEXT,
         meta_h REAL,
         PRIMARY KEY (terminal, origem)
+    );
+
+    CREATE TABLE IF NOT EXISTS fast_pass_plates (
+        terminal TEXT,
+        plate TEXT,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (terminal, plate)
+    );
+
+    CREATE TABLE IF NOT EXISTS fraud_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        placa TEXT,
+        data_suspeita DATETIME,
+        indicio TEXT,
+        fotos TEXT, -- JSON array de URLs
+        payload_json TEXT, -- Dados brutos do Power Automate
+        status TEXT DEFAULT 'PENDING',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        email TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        whatsapp_number TEXT,
+        reports_config TEXT, -- JSON: { daily: boolean, fraud: boolean }
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS gmo_features (
+        day DATE,
+        terminal TEXT,
+        volume INTEGER,
+        avg_ciclo_total_h REAL,
+        avg_veiculos_ativos REAL, -- Inércia Operacional (WIP médio)
+        avg_antecipacao_h REAL,
+        PRIMARY KEY (day, terminal)
+    );
+
+    CREATE TABLE IF NOT EXISTS gmo_forecast (
+        day DATE,
+        terminal TEXT,
+        pred_volume REAL,
+        pred_ciclo_total_h REAL,
+        pred_veiculos_ativos REAL,
+        taxa_antecipacao_atual REAL,
+        recom_acao TEXT,
+        insight_ia TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (day, terminal)
     );
 
     INSERT OR IGNORE INTO operational_benchmarks (key, value, description) VALUES ('ciclo_total_meta', 46.5333, 'Meta de Ciclo Total (h)');
@@ -100,6 +157,40 @@ if (!hasAgendamentoCol) {
     db.exec("ALTER TABLE gmo_history ADD COLUMN janela_agendamento DATETIME;");
 }
 
+const hasPlaca = tableInfo.some(col => col.name === 'placa');
+if (!hasPlaca) {
+    db.exec("ALTER TABLE gmo_history ADD COLUMN placa TEXT;");
+}
+
+const tableInfoFinal = db.prepare("PRAGMA table_info(gmo_history)").all() as any[];
+
+const hasSituacao = tableInfoFinal.some(col => col.name === 'situacao_descricao');
+if (!hasSituacao) {
+    db.exec("ALTER TABLE gmo_history ADD COLUMN situacao_descricao TEXT;");
+}
+
+const hasEvento = tableInfoFinal.some(col => col.name === 'evento_descricao');
+if (!hasEvento) {
+    db.exec("ALTER TABLE gmo_history ADD COLUMN evento_descricao TEXT;");
+}
+
+// Migration for movimento
+const hasMovimento = tableInfo.some(col => col.name === 'movimento');
+if (!hasMovimento) {
+    db.exec("ALTER TABLE gmo_history ADD COLUMN movimento TEXT;");
+}
+
+// Migration for fraud_alerts (fotos and payload_json)
+const fraudTableInfo = db.prepare("PRAGMA table_info(fraud_alerts)").all() as any[];
+const hasFotos = fraudTableInfo.some(col => col.name === 'fotos');
+if (!hasFotos) {
+    db.exec("ALTER TABLE fraud_alerts ADD COLUMN fotos TEXT;");
+}
+const hasPayload = fraudTableInfo.some(col => col.name === 'payload_json');
+if (!hasPayload) {
+    db.exec("ALTER TABLE fraud_alerts ADD COLUMN payload_json TEXT;");
+}
+
 // One-time Migration for records with null cliente_norm
 const needsMigration = db.prepare("SELECT COUNT(*) as cnt FROM gmo_history WHERE cliente_norm IS NULL AND cliente IS NOT NULL").get() as { cnt: number };
 if (needsMigration.cnt > 0) {
@@ -121,41 +212,46 @@ export interface GMORecord {
     origem: string;
     produto: string;
     cliente: string;
+    movimento: string;
     dt_inicio: string;
-    dt_peso_saida: string;
+    dt_peso_saida: string | null;
     ciclo_total_h: number;
-    fila_h?: number;
-    viagem_h?: number;
-    interno_h?: number;
-    dt_chegada?: string;
-    dt_cheguei?: string;
-    dt_chamada?: string;
-    area_verde_h?: number;
-    dt_agendamento?: string;
-    janela_agendamento?: string;
+    fila_h: number;
+    viagem_h: number;
+    interno_h: number;
+    dt_chegada: string | null;
+    dt_cheguei: string | null;
+    dt_chamada: string | null;
+    area_verde_h: number;
+    dt_agendamento: string | null;
+    janela_agendamento: string | null;
+    placa: string | null;
+    situacao_descricao: string | null;
+    evento_descricao: string | null;
 }
 
 export const saveGMOs = (records: GMORecord[]) => {
     const insert = db.prepare(`
         INSERT OR REPLACE INTO gmo_history (
-            gmo_id, terminal, origem, produto, cliente, cliente_norm, 
+            gmo_id, terminal, origem, produto, cliente, movimento, cliente_norm, 
             dt_inicio, dt_peso_saida, ciclo_total_h, fila_h, viagem_h, interno_h,
             dt_chegada, dt_cheguei, dt_chamada, area_verde_h,
-            dt_agendamento, janela_agendamento
+            dt_agendamento, janela_agendamento, placa, situacao_descricao, evento_descricao
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const transaction = db.transaction((rows: GMORecord[]) => {
         for (const row of rows) {
             const norm = normalizeClient(row.cliente);
             insert.run(
-                row.gmo_id, row.terminal, row.origem, row.produto, row.cliente, norm, 
+                row.gmo_id, row.terminal, row.origem, row.produto, row.cliente, row.movimento, norm, 
                 row.dt_inicio, row.dt_peso_saida, row.ciclo_total_h,
                 row.fila_h || 0, row.viagem_h || 0, row.interno_h || 0,
                 row.dt_chegada || null, row.dt_cheguei || null, row.dt_chamada || null,
                 row.area_verde_h || 0,
-                row.dt_agendamento || null, row.janela_agendamento || null
+                row.dt_agendamento || null, row.janela_agendamento || null,
+                row.placa || null, row.situacao_descricao || null, row.evento_descricao || null
             );
         }
     });
@@ -183,6 +279,7 @@ export const getHistoryStats = (terminal: string, start: string, end: string, op
         WHERE gh.terminal = ? 
           AND gh.dt_peso_saida >= ? 
           AND gh.dt_peso_saida <= ?
+          AND (gh.movimento IS NULL OR gh.movimento != 'CARGA')
     `;
     const params: any[] = [terminal, start, end];
 

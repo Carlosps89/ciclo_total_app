@@ -255,23 +255,50 @@ function SimulatorContent() {
                         </div>
 
                         {/* Reverse Calculation Banner */}
-                        <div className="mt-16 w-full bg-emerald-500/10 border border-emerald-500/20 rounded-3xl p-8 flex items-center justify-between">
+                        <div className={clsx(
+                            "mt-16 w-full border rounded-3xl p-8 flex items-center justify-between",
+                            neededCycleForMeta < 0 ? "bg-rose-500/10 border-rose-500/20" : "bg-emerald-500/10 border-emerald-500/20"
+                        )}>
                             <div className="flex items-center gap-6">
-                                <div className="p-4 bg-emerald-500/20 rounded-2xl shadow-xl">
-                                    <CalendarClock className="w-8 h-8 text-emerald-400" />
+                                <div className={clsx(
+                                    "p-4 rounded-2xl shadow-xl",
+                                    neededCycleForMeta < 0 ? "bg-rose-500/20" : "bg-emerald-500/20"
+                                )}>
+                                    <CalendarClock className={clsx(
+                                        "w-8 h-8",
+                                        neededCycleForMeta < 0 ? "text-rose-400" : "text-emerald-400"
+                                    )} />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-[11px] font-black text-emerald-500 uppercase tracking-widest">Necessidade de Operação</span>
+                                    <span className={clsx(
+                                        "text-[11px] font-black uppercase tracking-widest",
+                                        neededCycleForMeta < 0 ? "text-rose-500" : "text-emerald-500"
+                                    )}>Necessidade de Operação</span>
                                     <h4 className="text-xl font-bold text-white mt-1 italic tracking-tight">
-                                        Para atingir a meta de <span className="text-emerald-400 font-extrabold">40h</span>...
+                                        {neededCycleForMeta < 0 ? (
+                                            <>Meta de <span className="text-rose-400 font-extrabold">{meta}h</span> inatingível...</>
+                                        ) : (
+                                            <>Para atingir a meta de <span className="text-emerald-400 font-extrabold">{meta}h</span>...</>
+                                        )}
                                     </h4>
                                 </div>
                             </div>
                             <div className="flex flex-col items-end">
-                                <span className="text-[9px] text-emerald-500/60 font-black uppercase">Ciclo das próximas {remVolTotal} cargas</span>
-                                <div className="text-4xl font-black text-emerald-400 font-sans">
-                                    {neededCycleForMeta > 0 ? neededCycleForMeta.toFixed(1) : '---'}<span className="text-lg ml-0.5">h</span>
-                                </div>
+                                {neededCycleForMeta < 0 ? (
+                                    <>
+                                        <span className="text-[9px] text-rose-500/60 font-black uppercase">Melhor cenário possível</span>
+                                        <div className="text-4xl font-black text-rose-400 font-sans">
+                                            {((realVol * realAvg) / Math.max(projectedVolSuffix, 1)).toFixed(1)}<span className="text-lg ml-0.5">h</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-[9px] text-emerald-500/60 font-black uppercase">Ciclo das próximas {remVolTotal} cargas</span>
+                                        <div className="text-4xl font-black text-emerald-400 font-sans">
+                                            {remVolTotal > 0 ? neededCycleForMeta.toFixed(1) : '---'}<span className="text-lg ml-0.5">h</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

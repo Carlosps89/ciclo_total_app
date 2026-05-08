@@ -1,6 +1,6 @@
 import { runQuery, getSchemaMap } from './athena';
 import { COMMON_CTES } from './athena-sql';
-import { saveGMOs, GMORecord, getLastSyncTimestamp } from './db';
+import db, { saveGMOs, GMORecord, getLastSyncTimestamp } from './db';
 
 /**
  * Helper to generate partition filters (ano, mes, dia) based on a starting date
@@ -48,13 +48,14 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
 
     // Query for GMOs that finished after startTime
     const query = `
-        ${COMMON_CTES(map, terminal, partitionFilter)}
+        ${COMMON_CTES(map, terminal, partitionFilter, { start: startTime })}
         SELECT 
             gmo_id,
             terminal,
             origem,
             produto,
             cliente,
+            movimento,
             dt_emissao as dt_inicio,
             peso_saida as dt_peso_saida,
             ciclo_total_h,
@@ -66,11 +67,15 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
             dt_chamada,
             area_verde_cheguei_h as area_verde_h,
             dt_agendamento,
-            janela_agendamento
+            janela_agendamento,
+            placa_tracao,
+            situacao_descricao,
+            evento_descricao
         FROM calc
         WHERE (peso_saida >= timestamp '${startTime}' OR peso_saida IS NULL)
-          AND dt_emissao >= date_add('day', -10, current_date)
-          AND (ciclo_total_h >= 1.0 OR ciclo_total_h IS NULL)
+          AND (peso_saida IS NOT NULL OR dt_emissao >= date_add('day', -5, current_date))
+          AND (ciclo_total_h > 0 OR peso_saida IS NULL)
+          AND (situacao_descricao = 'FINALIZADA' OR situacao_descricao IS NULL OR situacao_descricao = 'ABERTA')
     `;
 
     console.log(`[Sync] [${terminal}] Buscando GMOs finalizados desde ${startTime}...`);
@@ -90,21 +95,32 @@ export async function syncFinishedGMOs(terminal: string, options: { daysLookback
             origem: data[2]?.VarCharValue,
             produto: data[3]?.VarCharValue,
             cliente: data[4]?.VarCharValue,
-            dt_inicio: data[5]?.VarCharValue,
-            dt_peso_saida: data[6]?.VarCharValue,
-            ciclo_total_h: parseFloat(data[7]?.VarCharValue || '0'),
-            fila_h: parseFloat(data[8]?.VarCharValue || '0'),
-            viagem_h: parseFloat(data[9]?.VarCharValue || '0'),
-            interno_h: parseFloat(data[10]?.VarCharValue || '0'),
-            dt_chegada: data[11]?.VarCharValue,
-            dt_cheguei: data[12]?.VarCharValue,
-            dt_chamada: data[13]?.VarCharValue,
-            area_verde_h: parseFloat(data[14]?.VarCharValue || '0'),
-            dt_agendamento: data[15]?.VarCharValue,
-            janela_agendamento: data[16]?.VarCharValue
+            movimento: data[5]?.VarCharValue || 'RODOVIARIO',
+            dt_inicio: data[6]?.VarCharValue,
+            dt_peso_saida: data[7]?.VarCharValue,
+            ciclo_total_h: parseFloat(data[8]?.VarCharValue || '0'),
+            fila_h: parseFloat(data[9]?.VarCharValue || '0'),
+            viagem_h: parseFloat(data[10]?.VarCharValue || '0'),
+            interno_h: parseFloat(data[11]?.VarCharValue || '0'),
+            dt_chegada: data[12]?.VarCharValue,
+            dt_cheguei: data[13]?.VarCharValue,
+            dt_chamada: data[14]?.VarCharValue,
+            area_verde_h: parseFloat(data[15]?.VarCharValue || '0'),
+            dt_agendamento: data[16]?.VarCharValue,
+            janela_agendamento: data[17]?.VarCharValue,
+            placa: data[18]?.VarCharValue,
+            situacao_descricao: data[19]?.VarCharValue,
+            evento_descricao: data[20]?.VarCharValue
         };
     });
 
     console.log(`[Sync] [${terminal}] Sincronizando ${records.length} registros para o SQLite...`);
     saveGMOs(records);
+
+    // Auto-cleanup stale ghosts in SQLite (older than 5 days and no output weight)
+    try {
+        db.prepare("DELETE FROM gmo_history WHERE dt_peso_saida IS NULL AND dt_inicio < date('now', '-5 days')").run();
+    } catch (e) {
+        console.error(`[Sync] [${terminal}] Erro na auto-limpeza:`, e);
+    }
 }

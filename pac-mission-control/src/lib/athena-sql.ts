@@ -86,6 +86,7 @@ export const COMMON_CTES = (
       ${map.placa} as _col_placa,
       ${map.origem} as _col_origem,
       ${map.dt_emissao} as _col_emissao,
+      ${map.dt_fiscal || 'NULL'} as _col_fiscal,
       ${map.dt_agendamento} as _col_agendamento,
       ${map.dt_chegada} as _col_chegada,
       ${map.dt_peso_saida} as _col_peso_saida,
@@ -96,6 +97,11 @@ export const COMMON_CTES = (
       ${map.situacao} as _col_situacao,
       ${map.produto} as _col_produto,
       ${map.cliente} as _col_cliente,
+      ${map.movimento} as _col_movimento,
+      ciclo_total_h as _col_ciclo_total,
+      aguardando_agendamento_h as _col_fila,
+      tempo_viagem_h as _col_viagem,
+      ciclo_interno_h as _col_interno,
       ano, mes, dia,
       ${tsUltColumn} as ts_ult
     FROM "${ATHENA_DATABASE}"."${targetView}"
@@ -121,9 +127,9 @@ export const COMMON_CTES = (
       try_cast(_col_chegada as timestamp) as dt_chegada,
       try_cast(_col_chamada as timestamp) as dt_chamada,
       
-      -- Metrics
-      date_diff('second', try_cast(_col_emissao as timestamp), try_cast(_col_peso_saida as timestamp)) / 3600.0 as ciclo_total_h,
-      date_diff('second', try_cast(_col_emissao as timestamp), try_cast(_col_agendamento as timestamp)) / 3600.0 as aguardando_agendamento_h,
+      -- Metrics (Strict calculations from user's Golden Rule)
+      date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_fiscal as timestamp)), try_cast(_col_peso_saida as timestamp)) / 3600.0 as ciclo_total_h,
+      date_diff('second', coalesce(try_cast(_col_emissao as timestamp), try_cast(_col_fiscal as timestamp)), try_cast(_col_agendamento as timestamp)) / 3600.0 as aguardando_agendamento_h,
       date_diff('second', try_cast(_col_agendamento as timestamp), try_cast(_col_chegada as timestamp)) / 3600.0 as tempo_viagem_h,
       date_diff('second', try_cast(_col_chegada as timestamp), try_cast(_col_peso_saida as timestamp)) / 3600.0 as tempo_interno_h,
       
@@ -133,15 +139,21 @@ export const COMMON_CTES = (
       
       CASE WHEN try_cast(_col_cheguei as timestamp) < try_cast(_col_janela as timestamp) THEN 1 ELSE 0 END as is_antecipado,
       CASE WHEN _col_cheguei IS NOT NULL AND _col_chamada IS NOT NULL THEN 'Sim' ELSE 'Não' END as is_area_verde,
-
+ 
       _col_evento as evento_descricao,
       _col_situacao as situacao_descricao,
       _col_produto as produto,
       _col_cliente as cliente,
+      _col_movimento as movimento,
+      _col_viagem as viagem_original,
+      _col_interno as interno_original,
       ts_ult,
       ano, mes, dia
       
     FROM dedupped
+    WHERE _col_movimento != 'CARGA'
+      AND (_col_emissao IS NOT NULL OR _col_fiscal IS NOT NULL)
+      AND _col_agendamento IS NOT NULL
   )
   `;
 };
@@ -174,6 +186,7 @@ export function getCleanMap(columns: string[]): Record<string, string> {
     
     gmo_id: rawMap.id || find(['gmo_id', 'id']) || 'gmo_id',
     placa_cavalo: find(['placa', 'tracao']) || 'placa_tracao',
-    cliente: rawMap.cliente || find(['cliente']) || 'cliente'
+    cliente: rawMap.cliente || find(['cliente']) || 'cliente',
+    dt_fiscal: find(['docto_fiscal_data', 'fiscal_data', 'data_fiscal']) || 'NULL'
   };
 }

@@ -46,10 +46,10 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     // Time Boundaries
     const startDay: string = `${brt.ymd} 00:00:00`;
-    const tmr: Date = new Date(now);
-    tmr.setDate(tmr.getDate() + 1);
-    const brtTmr = getBRTComponents(tmr); // D1
-    const endNextDay: string = `${brtTmr.ymd} 23:59:59`;
+    const d2: Date = new Date(now);
+    d2.setDate(d2.getDate() + 2);
+    const brtD2 = getBRTComponents(d2);   // D2
+    const endD2: string = `${brtD2.ymd} 23:59:59`;
 
     // Manual CTE construction
     const raw_cols: string = `
@@ -76,16 +76,15 @@ export async function GET(request: Request): Promise<NextResponse> {
     // Parsing Bucket Logic
     let bucketFilter = '';
     
-    if (bucket === '12h+') {
-        bucketFilter = `hours_early >= 12`;
+    if (bucket.includes('+')) {
+        const start = parseInt(bucket.replace('+', '').replace('h', ''));
+        bucketFilter = `hours_early >= ${start}`;
     } else {
-        // Expected format "0-1", "1-2"
         const parts = bucket.split('-');
         if (parts.length === 2) {
             const start = parseInt(parts[0]);
-            // const end = parseInt(parts[1]); 
-            // Logic: start <= h < start + 1 (since end is just start + 1)
-             bucketFilter = `hours_early >= ${start} AND hours_early < ${start + 1}`;
+            const end = parseInt(parts[1]); 
+            bucketFilter = `hours_early >= ${start} AND hours_early < ${end}`;
         }
     }
 
@@ -133,9 +132,9 @@ export async function GET(request: Request): Promise<NextResponse> {
             date_diff('second', dt_agendamento, cheguei) / 3600.0 as h_viagem,
             date_diff('second', chegada, coalesce(peso_saida, timestamp '${brt.full}')) / 3600.0 as h_interno
           FROM calc
-          WHERE cheguei >= timestamp '${startDay}' 
-            AND cheguei <= timestamp '${endNextDay}'
-            AND janela_agendamento IS NOT NULL
+          WHERE cheguei IS NOT NULL 
+            AND janela_agendamento >= timestamp '${startDay}'
+            AND janela_agendamento <= timestamp '${endD2}'
       )
       SELECT 
         gmo_id,

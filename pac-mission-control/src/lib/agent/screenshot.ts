@@ -24,10 +24,28 @@ async function generateBotSession() {
         .sign(key);
 }
 
-export async function captureDashboardScreenshot(path: string = '/'): Promise<Buffer> {
+let browserLock = Promise.resolve();
+
+export async function captureDashboardScreenshot(path: string = '/'): Promise<string> {
+    // Orquestrador de concorrência: Garante que apenas 1 browser rode por vez
+    // para evitar OOM (Out of Memory) em pedidos simultâneos.
+    const currentLock = browserLock;
+    let release: () => void;
+    browserLock = new Promise(resolve => { release = resolve; });
+    await currentLock;
+
+    console.log(`[Screenshot] Iniciando captura para: ${path}`);
     const browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: true
+        args: [
+            '--no-sandbox', 
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-zygote',
+            '--single-process'
+        ],
+        headless: true,
+        protocolTimeout: 120000 // Aumentado para evitar timeout em capturas pesadas
     });
 
     try {
@@ -62,7 +80,7 @@ export async function captureDashboardScreenshot(path: string = '/'): Promise<Bu
         console.log(`[Screenshot] Navegando para ${targetUrl}...`);
         
         // Navegar e esperar carregamento dos dados
-        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 90000 });
         
         // Aguarda até que o dashboard tenha dados reais (não apenas o estado de loading)
         console.log(`[Screenshot] Aguardando renderização dos dados...`);
@@ -105,12 +123,14 @@ export async function captureDashboardScreenshot(path: string = '/'): Promise<Bu
         const screenshot = await page.screenshot({
             type: 'jpeg',
             quality: 90,
-            fullPage: false
-        }) as Buffer;
+            fullPage: false,
+            encoding: 'base64'
+        }) as string;
 
         return screenshot;
 
     } finally {
         await browser.close();
+        if (release!) release!();
     }
 }

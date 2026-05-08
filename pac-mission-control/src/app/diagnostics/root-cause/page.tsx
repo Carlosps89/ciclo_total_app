@@ -8,6 +8,9 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { GlobalOutlierHeader, CycleSimulator, StageHistogram, HiddenPatternTable, OutlierData } from '@/components/OutliersDashboard';
 import OutlierDrilldownModal from '@/components/OutlierDrilldownModal';
+import { SidebarMenu } from '@/components/SidebarMenu';
+import { MobileBottomNav } from '@/components/MobileBottomNav';
+
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
@@ -35,6 +38,19 @@ function RCADashboardContent() {
   const [histogramSteps, setHistogramSteps] = useState<{ emissao: number, agendamento: number, viagem: number, verde: number, interno: number }>({
     emissao: 24, agendamento: 24, viagem: 24, verde: 24, interno: 12
   });
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [session, setSession] = useState<any>(null);
+
+  useEffect(() => {
+    fetch('/api/auth/session').then(res => {
+      if (res.ok) res.json().then(data => setSession(data.user));
+    }).catch(() => {});
+  }, []);
+
+  const handleLogout = async () => {
+    const res = await fetch('/api/logout', { method: 'POST' });
+    if (res.ok) window.location.href = '/login';
+  };
 
   // Load Whitelist from localStorage on mount
   useEffect(() => {
@@ -154,6 +170,14 @@ function RCADashboardContent() {
 
       {outlierData && (
         <>
+          <SidebarMenu 
+             isOpen={isMenuOpen} 
+             onClose={() => setIsMenuOpen(false)} 
+             terminal={terminal} 
+             session={session} 
+             onLogout={handleLogout} 
+          />
+
           <GlobalOutlierHeader
             terminal={terminal}
             startDate={startDate}
@@ -166,6 +190,7 @@ function RCADashboardContent() {
             setIqr={setIqrMultiplier}
             limits={manualLimits}
             setLimits={setManualLimits}
+            onMenuClick={() => setIsMenuOpen(true)}
           />
           <CycleSimulator simulation={outlierData.simulation} offenderFilter={offenderFilter} clearFilter={() => setOffenderFilter('')} />
 
@@ -227,8 +252,9 @@ function RCADashboardContent() {
             maxHours={drilldown.maxHours}
           />
         </>
-      )
-      }
+      )}
+
+      <MobileBottomNav />
     </div >
   );
 }

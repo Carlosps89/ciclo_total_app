@@ -29,6 +29,7 @@ export async function middleware(request: NextRequest) {
   // 2. Rotas de Autenticação (Públicas mas controladas)
   const isLoginPage = pathname === '/login';
   const isLoginApi = pathname === '/api/login';
+  const isFraudWebhook = pathname === '/api/bot/fraude-webhook';
 
   // 2.5 Bypass para o Robô (Screenshots)
   const botToken = request.headers.get('x-pac-bot-token');
@@ -41,7 +42,7 @@ export async function middleware(request: NextRequest) {
 
   // 4. Lógica de Redirecionamento
   if (!sessionToken) {
-    if (isLoginPage || isLoginApi) {
+    if (isLoginPage || isLoginApi || isFraudWebhook) {
       return NextResponse.next();
     }
     // BLOQUEIO TOTAL: Qualquer outra rota ou API sem token vai pro Login
